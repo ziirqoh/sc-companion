@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SC Companion</title>
-  <link rel="stylesheet" href="style.css?v=21">
+  <link rel="stylesheet" href="style.css?v=22">
+  <script>try { if (localStorage.getItem('sc-companion-theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
 </head>
 <body>
   <header>
@@ -19,6 +20,13 @@
       <span id="status-text">Loading…</span>
       <span id="countdown"></span>
       <button id="refresh-btn" title="Fetch the latest data now">↻ Refresh</button>
+      <button id="theme-btn" title="Switch between dark and light">☀ Light</button>
+      <select id="lang-select" aria-label="Language">
+        <option value="en">EN · English</option>
+        <option value="fr">FR · Français</option>
+        <option value="de">DE · Deutsch</option>
+        <option value="es">ES · Español</option>
+      </select>
     </div>
   </header>
 
@@ -437,8 +445,9 @@
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 
+  <script src="i18n.js?v=1"></script>
   <script src="shape.js?v=19"></script>
-  <script src="app.js?v=21"></script>
-  <script src="salvage.js?v=21"></script>
+  <script src="app.js?v=22"></script>
+  <script src="salvage.js?v=22"></script>
 </body>
 </html>

@@ -16,7 +16,7 @@ const { UEX_API, shapeData, appendSnapshot } = require('../shape.js');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.resolve(process.argv[2] || '_site');
 const SITE_URL = process.env.SITE_URL || 'https://ziirqoh.github.io/sc-companion';
-const SITE_FILES = ['index.html', 'style.css', 'app.js', 'salvage.js', 'shape.js'];
+const SITE_FILES = ['index.html', 'style.css', 'i18n.js', 'app.js', 'salvage.js', 'shape.js'];
 
 async function getJson(url) {
   const res = await fetch(url, { headers: { 'User-Agent': 'sc-companion-updater' }, signal: AbortSignal.timeout(60_000) });

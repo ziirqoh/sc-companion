@@ -1,10 +1,12 @@
 # SC Companion
 
-A free Star Citizen helper website: static files (`index.html`, `style.css`, `shape.js`, `app.js`, `salvage.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
+A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
 
 Live site: https://ziirqoh.github.io/sc-companion/
 
 The front page (`#/`) shows live stats and a highlight from each tool. The tools are grouped under **Trade Companion** (`#/trade/...`) and **Salvage Companion** (`#/salvage/...`).
+
+The header has a dark/light theme switch and a language menu (English, French, German, Spanish). The page is written in English; `i18n.js` holds the translations and swaps the text as it appears. Place, commodity and ship names stay in English, as in the game. To translate new text, add a row to `STRINGS` in `i18n.js`.
 
 ## Trade Companion
 

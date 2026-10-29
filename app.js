@@ -1124,5 +1124,19 @@ $('refresh-btn').addEventListener('click', async () => {
   $('refresh-btn').disabled = false;
 });
 
+// Dark (default) or light theme. The <head> applies the saved choice before the page paints.
+const THEME_KEY = 'sc-companion-theme';
+function showTheme() {
+  $('theme-btn').textContent = document.documentElement.dataset.theme === 'light' ? '☾ Dark' : '☀ Light';
+}
+$('theme-btn').addEventListener('click', () => {
+  const light = document.documentElement.dataset.theme !== 'light';
+  if (light) document.documentElement.dataset.theme = 'light';
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem(THEME_KEY, light ? 'light' : 'dark'); } catch (e) {}
+  showTheme();
+});
+showTheme();
+
 refresh();
 setInterval(tick, 1000);
