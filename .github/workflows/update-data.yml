@@ -1,0 +1,47 @@
+# Fetches the latest UEX data every 15 minutes (whether or not anyone has the site open),
+# adds it to the 24 h history, and publishes the site with that data to GitHub Pages.
+name: Update data and deploy
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fetch UEX data and build the site
+        run: node scripts/update-data.mjs _site
+        env:
+          SITE_URL: https://ziirqoh.github.io/sc-trade-companion
+      - uses: actions/upload-pages-artifact@v3
+        if: always()
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    if: always() && needs.build.result != 'cancelled'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -31,7 +31,12 @@ const shortName = (c) => (c.name === RMC ? 'RMC' : c.name === CMAT ? 'Constructi
 
 // ---------- ship data & guides ----------
 
+// Salvage ships come with the data (shape.js keeps only salvage vehicles).
 async function loadSalvageShips() {
+  if (data?.vehicles?.length) {
+    salvageShips = [...data.vehicles].sort((a, b) => (a.scu || 0) - (b.scu || 0));
+    return;
+  }
   if (salvageShips || salvageShipsLoading) return;
   salvageShipsLoading = true;
   try {

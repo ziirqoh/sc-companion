@@ -1,6 +1,6 @@
 # SC Companion
 
-A free Star Citizen helper website. It is static files only (`index.html`, `style.css`, `app.js`, `salvage.js`) with no server and no build step.
+A free Star Citizen helper website: static files (`index.html`, `style.css`, `shape.js`, `app.js`, `salvage.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
 
 The front page (`#/`) shows live stats and a highlight from each tool. The tools are grouped under **Trade Companion** (`#/trade/...`) and **Salvage Companion** (`#/salvage/...`).
 
@@ -23,10 +23,18 @@ The front page (`#/`) shows live stats and a highlight from each tool. The tools
 
 ## How the data works
 
-- Each visitor's browser loads data directly from the public [UEX Corp](https://uexcorp.space) API, which allows cross-origin requests. Players report this data, because the game has no official API.
-- The page fetches new data **every 15 minutes** while it's open. The ↻ button forces a refresh, limited to once a minute.
-- Stock history (up to 24 h) is saved in each visitor's own browser using IndexedDB. It only builds up while the page is open.
+- **Every 15 minutes, even when nobody has the site open,** the GitHub Actions workflow in  runs . It:
+  1. fetches the latest data from the public [UEX Corp](https://uexcorp.space) API (players report this data, because the game has no official API),
+  2. adds it to a 24 h history, read back from the live site so nothing is committed,
+  3. publishes the site together with ,  and .
+- The page loads those files and shows the same data and stock charts to everyone. When the next update is due, it checks for it every 30 seconds.
+- If the published data is missing or more than 25 minutes old, the page fetches UEX directly instead. This happens when GitHub runs late or when you're testing locally. The ↻ button does the same, limited to once a minute.
+- GitHub's scheduler can run a few minutes late when it's busy. It also pauses scheduled runs in a repo with no activity for 60 days. Re-enable it from the Actions tab if that happens.
 
+### Testing locally
+
+\UEX: 2580 prices, 161 terminals, 5 salvage ships. History: 1 snapshots.
+Wrote site to C:UsersenoiDesktopCodeStar Citizen_site
 ## Is it bannable?
 
 No. The site follows the rules that matter for Star Citizen's Terms of Service:

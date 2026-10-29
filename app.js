@@ -161,116 +161,92 @@ function sparkline(terminal, commodity, key) {
 }
 
 // ---------- data loading ----------
-// The site talks to the public UEX Corp API straight from the browser (it allows cross-origin reads),
-// so it can be hosted as plain static files. Nothing here touches the game client.
+// Every 15 minutes a GitHub Actions job fetches UEX, adds the result to a 24 h history and publishes it as
+// data/latest.json + data/history.json, whether or not anyone has the site open. The page just loads those.
+// If they're missing (e.g. running locally), the page falls back to calling the UEX API itself.
+// Nothing here touches the game client.
 
-const API = 'https://api.uexcorp.space/2.0';
 const REFRESH_MS = 15 * 60 * 1000;
-const HISTORY_KEEP = 96; // 96 snapshots x 15 min = 24 h
+const STALE_MS = 25 * 60 * 1000; // published data older than this: the server run is late, fetch UEX directly
 
-const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
-
-// Compact snapshots: { t, rows: [[terminal, commodity, priceBuy, priceSell, scuBuy, scuSellStock, scuSell]] }
-let snapshots = [];
+let history = null;        // { times, series } — see shape.js
+let source = null;         // 'published' | 'live'
 let refreshing = false;
 let lastError = null;
-let nextRefreshAt = null;
 let lastManualRefresh = 0;
 
-// History lives in IndexedDB (too big for localStorage). If storage is blocked, it just stays in memory.
-const historyStore = {
-  db: null,
-  async open() {
-    try {
-      this.db = await new Promise((resolve, reject) => {
-        const req = indexedDB.open('sc-trade-companion', 1);
-        req.onupgradeneeded = () => req.result.createObjectStore('kv');
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      });
-    } catch { this.db = null; }
-  },
-  async load() {
-    if (!this.db) return [];
-    try {
-      return await new Promise((resolve, reject) => {
-        const req = this.db.transaction('kv').objectStore('kv').get('history');
-        req.onsuccess = () => resolve(req.result || []);
-        req.onerror = () => reject(req.error);
-      });
-    } catch { return []; }
-  },
-  save(value) {
-    if (!this.db) return;
-    try { this.db.transaction('kv', 'readwrite').objectStore('kv').put(value, 'history'); } catch {}
-  },
-};
-
 async function getApi(endpoint) {
-  const res = await fetch(`${API}/${endpoint}`, { signal: AbortSignal.timeout(60_000) });
+  const res = await fetch(`${UEX_API}/${endpoint}`, { signal: AbortSignal.timeout(60_000) });
   if (!res.ok) throw new Error(`${endpoint}: HTTP ${res.status}`);
   const body = await res.json();
   if (body.status !== 'ok') throw new Error(`${endpoint}: ${body.status}`);
   return body.data;
 }
 
-async function refresh() {
+async function getPublished(name) {
+  const res = await fetch(`data/${name}?t=${Date.now()}`, { cache: 'no-store', signal: AbortSignal.timeout(60_000) });
+  if (!res.ok) throw new Error(`data/${name}: HTTP ${res.status}`);
+  return res.json();
+}
+
+// Uses a data set (shaped like shape.js's shapeData) and its history, and redraws everything.
+function applyData(shaped, hist) {
+  history = hist || { times: [], series: {} };
+  const prevIndex = history.times.length - 2; // the snapshot before the latest one
+  data = {
+    ...shaped,
+    prices: shaped.prices.map((p) => {
+      const list = history.series[priceKey(p)];
+      const before = list && prevIndex >= 0 ? list.filter((e) => e[0] <= prevIndex).pop() : null;
+      return { ...p, prev: before ? { price_buy: before[1], price_sell: before[2], scu_buy: before[3], scu_sell_stock: before[4], scu_sell: before[5] } : null };
+    }),
+  };
+  buildIndexes();
+  lastError = null;
+  initSelectors();
+  renderAll();
+}
+
+async function loadPublished() {
+  const [latest, hist] = await Promise.all([getPublished('latest.json'), getPublished('history.json')]);
+  source = 'published';
+  applyData(latest, hist);
+}
+
+// Straight from UEX, adding the result to the in-memory history.
+async function loadLive() {
+  const [commodities, terminals, prices, vehicles] = await Promise.all([
+    getApi('commodities'),
+    getApi('terminals?type=commodity'),
+    getApi('commodities_prices_all'),
+    getApi('vehicles'),
+  ]);
+  const now = Date.now();
+  source = 'live';
+  applyData(shapeData({ commodities, terminals, prices, vehicles }, now), appendSnapshot(history, prices, now));
+}
+
+// Gets the newest data available: the published files, or UEX directly if those are missing or too old.
+async function refresh({ forceLive = false } = {}) {
   if (refreshing) return;
   refreshing = true;
   updateStatus();
   try {
-    const [commodities, terminals, prices] = await Promise.all([
-      getApi('commodities'),
-      getApi('terminals?type=commodity'),
-      getApi('commodities_prices_all'),
-    ]);
-
-    // A page reload minutes after the last refresh replaces that snapshot instead of adding a near-duplicate.
-    if (snapshots.length && Date.now() - snapshots[snapshots.length - 1].t < 5 * 60 * 1000) snapshots.pop();
-    // Previous snapshot, so tables can show what changed.
-    const prev = new Map();
-    const last = snapshots[snapshots.length - 1];
-    if (last) for (const r of last.rows) prev.set(`${r[0]}:${r[1]}`, r);
-
-    const fetchedAt = Date.now();
-    data = {
-      fetchedAt,
-      commodities: commodities
-        .filter((c) => c.is_visible)
-        .map((c) => pick(c, [
-          'id', 'name', 'code', 'kind', 'weight_scu', 'price_buy', 'price_sell',
-          'is_buyable', 'is_sellable', 'is_illegal', 'is_volatile_qt', 'is_volatile_time',
-          'is_explosive', 'is_raw', 'is_refined', 'is_refinable', 'is_mineral',
-          'is_harvestable', 'is_fuel', 'is_temporary', 'wiki',
-        ])),
-      terminals: terminals.map((t) => pick(t, [
-        'id', 'name', 'displayname', 'fullname', 'nickname', 'star_system_name', 'planet_name',
-        'moon_name', 'orbit_name', 'space_station_name', 'city_name', 'outpost_name',
-        'faction_name', 'max_container_size', 'has_loading_dock', 'has_freight_elevator',
-        'has_docking_port', 'is_auto_load', 'is_refuel', 'is_repair', 'is_nqa', 'is_jump_point',
-      ])),
-      prices: prices.map((p) => {
-        const r = prev.get(`${p.id_terminal}:${p.id_commodity}`);
-        return { ...p, prev: r ? { price_buy: r[2], price_sell: r[3], scu_buy: r[4], scu_sell_stock: r[5], scu_sell: r[6] } : null };
-      }),
-    };
-
-    snapshots.push({
-      t: fetchedAt,
-      rows: prices.map((p) => [p.id_terminal, p.id_commodity, p.price_buy, p.price_sell, p.scu_buy, p.scu_sell_stock, p.scu_sell]),
-    });
-    if (snapshots.length > HISTORY_KEEP) snapshots.splice(0, snapshots.length - HISTORY_KEEP);
-    historyStore.save(snapshots);
-
-    buildIndexes();
-    lastError = null;
-    initSelectors();
-    renderAll();
+    let published = false;
+    if (!forceLive) {
+      try {
+        const meta = await getPublished('meta.json');
+        if (Date.now() - meta.fetchedAt < STALE_MS) {
+          if (!data || meta.fetchedAt > data.fetchedAt) await loadPublished();
+          published = true;
+        }
+      } catch { /* no published data: fall back to UEX */ }
+    }
+    if (!published) await loadLive();
   } catch (err) {
     lastError = String(err.message || err);
   } finally {
     refreshing = false;
-    nextRefreshAt = Date.now() + REFRESH_MS;
     updateStatus();
   }
 }
@@ -288,12 +264,8 @@ function buildIndexes() {
   for (const list of sellByCommodity.values()) list.sort((a, b) => b.price_sell - a.price_sell);
 
   historyIndex = new Map();
-  for (const snap of snapshots) {
-    for (const r of snap.rows) {
-      const key = `${r[0]}:${r[1]}`;
-      if (!historyIndex.has(key)) historyIndex.set(key, []);
-      historyIndex.get(key).push({ t: snap.t, scu_buy: r[4], scu_sell_stock: r[5] });
-    }
+  for (const [key, list] of Object.entries(history.series)) {
+    historyIndex.set(key, expandSeries(history, list).map(({ t, values }) => ({ t, scu_buy: values[2], scu_sell_stock: values[3] })));
   }
 }
 
@@ -301,16 +273,28 @@ function updateStatus() {
   const txt = $('status-text');
   if (refreshing) txt.textContent = 'Refreshing…';
   else if (lastError) txt.innerHTML = `<span class="error">Last refresh failed: ${esc(lastError)}</span>`;
-  else if (data) txt.textContent = `Updated ${new Date(data.fetchedAt).toLocaleTimeString()}`;
+  else if (data) {
+    txt.textContent = `Data from ${new Date(data.fetchedAt).toLocaleTimeString()}`;
+    txt.title = source === 'published'
+      ? 'Fetched by the server every 15 minutes, even when nobody has the site open'
+      : 'Fetched by your browser directly from UEX';
+  }
 }
 
-// Runs every second: updates the countdown and triggers the 15-minute refresh.
-// Checking the clock (instead of one long timer) also catches up after the tab was asleep.
+// Runs every second. The next server update is due 15 minutes after the current data;
+// once it's due, the page checks for it every 30 seconds and loads it as soon as it's published.
+let lastCheck = 0;
 function tick() {
-  if (!nextRefreshAt) return;
-  if (Date.now() >= nextRefreshAt && !refreshing) refresh();
-  const secs = Math.max(0, Math.round((nextRefreshAt - Date.now()) / 1000));
-  $('countdown').textContent = `· next in ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+  if (!data) return;
+  const due = data.fetchedAt + REFRESH_MS;
+  const secs = Math.round((due - Date.now()) / 1000);
+  $('countdown').textContent = secs > 0
+    ? `· next update in ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`
+    : '· update due, checking…';
+  if (secs <= 0 && !refreshing && Date.now() - lastCheck > 30_000) {
+    lastCheck = Date.now();
+    refresh();
+  }
 }
 
 // ---------- selectors ----------
@@ -1106,13 +1090,12 @@ $('refresh-btn').addEventListener('click', async () => {
   }
   lastManualRefresh = Date.now();
   $('refresh-btn').disabled = true;
+  // Newer server data if there is some, otherwise straight from UEX.
+  const before = data?.fetchedAt;
   await refresh();
+  if (data && data.fetchedAt === before) await refresh({ forceLive: true });
   $('refresh-btn').disabled = false;
 });
 
-(async () => {
-  await historyStore.open();
-  snapshots = await historyStore.load();
-  await refresh();
-  setInterval(tick, 1000);
-})();
+refresh();
+setInterval(tick, 1000);
