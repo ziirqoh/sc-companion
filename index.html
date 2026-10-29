@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SC Trade Companion</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo">◈</span>
+      <div>
+        <h1>SC Trade Companion</h1>
+        <small>Star Citizen trading, inventory and commodity guide</small>
+      </div>
+    </div>
+    <div class="status">
+      <span id="status-text">Loading…</span>
+      <span id="countdown"></span>
+      <button id="refresh-btn" title="Fetch the latest data now">↻ Refresh</button>
+    </div>
+  </header>
+
+  <nav>
+    <button class="tab active" data-tab="route">Sell Finder</button>
+    <button class="tab" data-tab="best">Best Routes</button>
+    <button class="tab" data-tab="inventory">Shop Inventory</button>
+    <button class="tab" data-tab="commodities">Commodity Guide</button>
+  </nav>
+
+  <main>
+    <!-- Sell finder: I bought X at Y for Z, where do I sell? -->
+    <section id="tab-route" class="panel active">
+      <p class="hint">Pick what you're buying and where. The list ranks every place that buys it back, best price first.</p>
+      <div class="form">
+        <label>Commodity
+          <select id="r-commodity"></select>
+        </label>
+        <label>Buying at
+          <select id="r-terminal"></select>
+        </label>
+        <label>Price paid / SCU (aUEC)
+          <input id="r-price" type="number" min="0" step="1">
+        </label>
+        <label>Cargo (SCU)
+          <input id="r-cargo" type="number" min="1" step="1" value="96">
+        </label>
+        <label>Budget (aUEC, optional)
+          <input id="r-budget" type="number" min="0" step="1000" placeholder="no limit">
+        </label>
+        <label>Sort by
+          <select id="r-sort">
+            <option value="sell">Best price / SCU</option>
+            <option value="profit">Best total profit</option>
+          </select>
+        </label>
+        <label class="check"><input id="r-cross" type="checkbox" checked> Include other star systems</label>
+      </div>
+      <div id="r-summary" class="summary"></div>
+      <div class="table-wrap"><table id="r-table"></table></div>
+    </section>
+
+    <!-- Best routes across the whole verse -->
+    <section id="tab-best" class="panel">
+      <p class="hint">The most profitable buy → sell pairs right now, for your cargo hold and budget.</p>
+      <div class="form">
+        <label>Cargo (SCU)
+          <input id="b-cargo" type="number" min="1" step="1" value="96">
+        </label>
+        <label>Budget (aUEC, optional)
+          <input id="b-budget" type="number" min="0" step="1000" placeholder="no limit">
+        </label>
+        <label>Star system
+          <select id="b-system"><option value="">All systems</option></select>
+        </label>
+        <label>Start from
+          <select id="b-from"><option value="">Anywhere</option></select>
+        </label>
+        <label class="check"><input id="b-same" type="checkbox" checked> Stay in one system</label>
+        <label class="check"><input id="b-illegal" type="checkbox"> Include illegal goods</label>
+      </div>
+      <div class="table-wrap"><table id="b-table"></table></div>
+    </section>
+
+    <!-- Shop inventory, updated every 15 min -->
+    <section id="tab-inventory" class="panel">
+      <p class="hint">What a commodity shop has in storage. Data refreshes every 15 minutes; ▲▼ show changes since the previous refresh. Click a row for its stock history.</p>
+      <div class="form">
+        <label class="wide">Shop
+          <select id="i-terminal"></select>
+        </label>
+        <label>Filter
+          <input id="i-filter" type="search" placeholder="commodity name…">
+        </label>
+      </div>
+      <div id="i-info" class="summary"></div>
+      <div class="table-wrap"><table id="i-table"></table></div>
+      <div id="i-history" class="history"></div>
+    </section>
+
+    <!-- Commodity encyclopedia -->
+    <section id="tab-commodities" class="panel">
+      <p class="hint">Every tradeable commodity: what it is, its risks, and where it's cheapest and most valuable.</p>
+      <div class="form">
+        <label>Search
+          <input id="c-filter" type="search" placeholder="name, code or kind…">
+        </label>
+        <label>Kind
+          <select id="c-kind"><option value="">All kinds</option></select>
+        </label>
+      </div>
+      <div class="table-wrap"><table id="c-table"></table></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Data: <a href="https://uexcorp.space" target="_blank" rel="noopener">UEX Corp</a> community reports. Prices and stock are reported by players, so check the "reported" age before a long haul. This site never connects to or modifies the game.</p>
+    <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
