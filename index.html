@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>SC Trade Companion</title>
-  <link rel="stylesheet" href="style.css?v=4">
+  <title>SC Companion</title>
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
   <header>
-    <div class="brand">
+    <a class="brand" href="#/">
       <span class="logo">◈</span>
       <div>
-        <h1>SC Trade Companion</h1>
-        <small>Star Citizen trading, inventory and commodity guide</small>
+        <h1>SC Companion</h1>
+        <small>Your Star Citizen helper</small>
       </div>
-    </div>
+    </a>
     <div class="status">
       <span id="status-text">Loading…</span>
       <span id="countdown"></span>
@@ -22,15 +22,63 @@
     </div>
   </header>
 
-  <nav>
-    <button class="tab active" data-tab="sell">Sell Finder</button>
-    <button class="tab" data-tab="routes">Best Routes</button>
-    <button class="tab" data-tab="commodities">Commodity Guide</button>
+  <nav class="main-nav">
+    <a class="tab" data-page="home" href="#/">Home</a>
+    <a class="tab" data-page="trade" href="#/trade/sell">Trade Companion</a>
   </nav>
 
   <main>
+    <!-- Front page -->
+    <div id="page-home" class="page">
+      <section class="hero">
+        <h2>Welcome to SC Companion</h2>
+        <p>Tools that help you understand Star Citizen's economy: what to buy, where to sell it, and what every shop has in stock. Prices come from player reports and refresh every 15 minutes.</p>
+        <div id="home-stats" class="stats"></div>
+      </section>
+
+      <section class="home-section">
+        <div class="section-head">
+          <h2>Trade Companion</h2>
+          <a class="button" href="#/trade/sell">Open Trade Companion →</a>
+        </div>
+        <div class="feature-grid">
+          <a class="feature" href="#/trade/sell">
+            <div class="feature-icon">⌖</div>
+            <h3>Sell Finder</h3>
+            <p>Choose where you are. See what the shop sells, its stock, and the best place to sell each item.</p>
+            <div id="home-sell" class="feature-live"></div>
+          </a>
+          <a class="feature" href="#/trade/routes">
+            <div class="feature-icon">⇄</div>
+            <h3>Best Routes</h3>
+            <p>Enter how much you want to invest and your cargo space. Get what to buy, where to buy it, and where to sell it.</p>
+            <div id="home-routes" class="feature-live"></div>
+          </a>
+          <a class="feature" href="#/trade/commodities">
+            <div class="feature-icon">▤</div>
+            <h3>Commodity Guide</h3>
+            <p>Every tradeable commodity with its risks, cheapest buy, best sell and max margin. Sort by any column.</p>
+            <div id="home-commodities" class="feature-live"></div>
+          </a>
+        </div>
+      </section>
+
+      <section class="home-section note">
+        <h3>Safe to use</h3>
+        <p>SC Companion is a normal website. It never connects to, reads or modifies the game, so using it can't get your account banned.</p>
+      </section>
+    </div>
+
+    <!-- Trade Companion -->
+    <div id="page-trade" class="page">
+    <nav class="sub-nav">
+      <a class="tab" data-tab="sell" href="#/trade/sell">Sell Finder</a>
+      <a class="tab" data-tab="routes" href="#/trade/routes">Best Routes</a>
+      <a class="tab" data-tab="commodities" href="#/trade/commodities">Commodity Guide</a>
+    </nav>
+
     <!-- Sell finder: I'm at this location, what can I buy here and where do I sell it? -->
-    <section id="tab-sell" class="panel active">
+    <section id="tab-sell" class="panel">
       <p class="hint">Choose where you are. You'll see what this shop sells right now, its price and stock, and where to sell each item for the most profit. Click a row for every sell location and its 24 h stock history.</p>
       <div class="form">
         <label class="wide">Your location
@@ -105,6 +153,7 @@
       </div>
       <div class="table-wrap"><table id="c-table"></table></div>
     </section>
+    </div>
   </main>
 
   <footer>
@@ -112,6 +161,6 @@
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

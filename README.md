@@ -1,8 +1,10 @@
-# SC Trade Companion
+# SC Companion
 
-A free Star Citizen trading website. It's three static files (`index.html`, `style.css` and `app.js`) with no server and no build step.
+A free Star Citizen helper website. It's three static files (`index.html`, `style.css` and `app.js`) with no server and no build step.
 
-## Features
+The front page (`#/`) shows live stats and a highlight from each tool. The tools are grouped under **Trade Companion** (`#/trade/...`).
+
+## Trade Companion
 
 | Tab | What it does |
 |---|---|

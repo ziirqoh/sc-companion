@@ -1,10 +1,11 @@
-// SC Trade Companion — front end.
+// SC Companion — front end.
 
 const $ = (id) => document.getElementById(id);
 
 const STATUS = { 1: 'Out of stock', 2: 'Very low', 3: 'Low', 4: 'Medium', 5: 'High', 6: 'Very high', 7: 'Max' };
 // For a shop that buys from you, an empty inventory is good news (it pays full price), so colours flip.
 const SELL_STATUS = { 1: 'Empty', 2: 'Very low', 3: 'Low', 4: 'Medium', 5: 'High', 6: 'Very high', 7: 'Full' };
+// Storage keys keep the old name so players don't lose saved settings and history after the rename.
 const PREFS_KEY = 'sc-trade-companion';
 
 let data = null;            // { commodities, terminals, prices, fetchedAt }
@@ -151,7 +152,7 @@ const HISTORY_KEEP = 96; // 96 snapshots x 15 min = 24 h
 const pick = (obj, keys) => Object.fromEntries(keys.map((k) => [k, obj[k]]));
 
 // Compact snapshots: { t, rows: [[terminal, commodity, priceBuy, priceSell, scuBuy, scuSellStock, scuSell]] }
-let history = [];
+let snapshots = [];
 let refreshing = false;
 let lastError = null;
 let nextRefreshAt = null;
@@ -206,10 +207,10 @@ async function refresh() {
     ]);
 
     // A page reload minutes after the last refresh replaces that snapshot instead of adding a near-duplicate.
-    if (history.length && Date.now() - history[history.length - 1].t < 5 * 60 * 1000) history.pop();
+    if (snapshots.length && Date.now() - snapshots[snapshots.length - 1].t < 5 * 60 * 1000) snapshots.pop();
     // Previous snapshot, so tables can show what changed.
     const prev = new Map();
-    const last = history[history.length - 1];
+    const last = snapshots[snapshots.length - 1];
     if (last) for (const r of last.rows) prev.set(`${r[0]}:${r[1]}`, r);
 
     const fetchedAt = Date.now();
@@ -235,12 +236,12 @@ async function refresh() {
       }),
     };
 
-    history.push({
+    snapshots.push({
       t: fetchedAt,
       rows: prices.map((p) => [p.id_terminal, p.id_commodity, p.price_buy, p.price_sell, p.scu_buy, p.scu_sell_stock, p.scu_sell]),
     });
-    if (history.length > HISTORY_KEEP) history.splice(0, history.length - HISTORY_KEEP);
-    historyStore.save(history);
+    if (snapshots.length > HISTORY_KEEP) snapshots.splice(0, snapshots.length - HISTORY_KEEP);
+    historyStore.save(snapshots);
 
     buildIndexes();
     lastError = null;
@@ -268,7 +269,7 @@ function buildIndexes() {
   for (const list of sellByCommodity.values()) list.sort((a, b) => b.price_sell - a.price_sell);
 
   historyIndex = new Map();
-  for (const snap of history) {
+  for (const snap of snapshots) {
     for (const r of snap.rows) {
       const key = `${r[0]}:${r[1]}`;
       if (!historyIndex.has(key)) historyIndex.set(key, []);
@@ -754,14 +755,73 @@ function renderAll() {
   renderSell();
   renderRoutes();
   renderCommodities();
+  renderHome();
 }
 
-document.querySelectorAll('nav .tab').forEach((btn) =>
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('nav .tab').forEach((b) => b.classList.toggle('active', b === btn));
-    document.querySelectorAll('.panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + btn.dataset.tab));
-  })
-);
+// ---------- Front page ----------
+
+function renderHome() {
+  const tradeShops = new Set(data.prices.map((p) => p.id_terminal)).size;
+  const tradeable = new Set(data.prices.map((p) => p.id_commodity)).size;
+  const fresh = data.prices.filter((p) => Date.now() / 1000 - p.date_modified < 24 * 3600).length;
+  $('home-stats').innerHTML = `
+    <div><div class="value">${fmt(tradeable)}</div><div class="label">commodities tracked</div></div>
+    <div><div class="value">${fmt(tradeShops)}</div><div class="label">trade terminals</div></div>
+    <div><div class="value">${fmt(data.prices.length)}</div><div class="label">prices &amp; stock levels</div></div>
+    <div><div class="value">${fmt(fresh)}</div><div class="label">reported in the last 24 h</div></div>`;
+
+  // Sell Finder: best buy at the player's saved location, by total profit for their cargo (like the Sell Finder card).
+  const here = terminalsById.get(Number($('s-location').value));
+  const cargo = num($('s-cargo')) || 0;
+  const budget = num($('s-budget'));
+  let bestHere = null;
+  for (const g of data.prices) {
+    if (g.id_terminal !== here?.id || !(g.price_buy > 0) || outOfStock(g)) continue;
+    const s = (sellByCommodity.get(g.id_commodity) || []).find((x) => x.id_terminal !== g.id_terminal);
+    if (!s || s.price_sell <= g.price_buy) continue;
+    const scu = tradeableScu({ cargo, budget, buyPrice: g.price_buy, buyStock: g.scu_buy, sellDemand: s.scu_sell });
+    const profit = (s.price_sell - g.price_buy) * scu;
+    if (scu > 0 && (!bestHere || profit > bestHere.profit)) bestHere = { g, s, scu, profit };
+  }
+  $('home-sell').innerHTML = bestHere
+    ? `<span class="label">At ${esc(terminalName(here))}:</span> buy ${fmt(bestHere.scu)} SCU <b>${esc(bestHere.g.commodity_name)}</b> for ${fmt(bestHere.g.price_buy)}, sell at ${esc(terminalName(terminalsById.get(bestHere.s.id_terminal)) || bestHere.s.terminal_name)}, <span class="good">+${fmt(bestHere.profit)} aUEC</span>`
+    : '';
+
+  // Best Routes: the current recommendation with the player's saved planner settings.
+  const plan = planRoutes();
+  const p = plan.plans[0];
+  $('home-routes').innerHTML = p
+    ? `<span class="label">${plan.budget ? fmt(plan.budget) + ' aUEC' : 'Any budget'}, ${fmt(plan.cargo)} SCU:</span> ${p.lines.map((l) => `${fmt(l.scu)} SCU <b>${esc(l.c.name)}</b>`).join(', ')} from ${esc(terminalName(p.bt))} to ${esc(terminalName(p.st))}, <span class="good">+${fmt(p.profit)} aUEC</span>`
+    : '';
+
+  // Commodity Guide: the biggest margin anywhere.
+  let top = null;
+  for (const [cid, sells] of sellByCommodity) {
+    const c = commoditiesById.get(cid);
+    const minBuy = data.prices.filter((x) => x.id_commodity === cid && x.price_buy > 0).reduce((a, x) => (!a || x.price_buy < a.price_buy ? x : a), null);
+    if (c && minBuy && (!top || sells[0].price_sell - minBuy.price_buy > top.margin)) top = { c, margin: sells[0].price_sell - minBuy.price_buy };
+  }
+  $('home-commodities').innerHTML = top
+    ? `<span class="label">Biggest margin right now:</span> <b>${esc(top.c.name)}</b> <span class="good">+${fmt(top.margin)} / SCU</span>${top.c.is_illegal ? ' <span class="badge bad">Illegal</span>' : ''}`
+    : '';
+}
+
+// ---------- navigation ----------
+// Pages live in the URL hash (#/ and #/trade/<tab>) so links, bookmarks and the back button work.
+
+function route() {
+  const [, page = '', tab = 'sell'] = location.hash.split('/');
+  const current = page === 'trade' ? 'trade' : 'home';
+  document.querySelectorAll('.page').forEach((el) => el.classList.toggle('active', el.id === 'page-' + current));
+  document.querySelectorAll('.main-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.page === current));
+  document.querySelectorAll('.sub-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
+  document.querySelectorAll('.panel').forEach((el) => el.classList.toggle('active', el.id === 'tab-' + tab));
+  if (current === 'home' && data) renderHome(); // reflect settings changed on the other pages
+  window.scrollTo(0, 0);
+}
+
+window.addEventListener('hashchange', route);
+route();
 
 const on = (ids, evt, fn) => ids.forEach((id) => $(id).addEventListener(evt, () => { if (data) { fn(); savePrefs(); } }));
 
@@ -813,7 +873,7 @@ $('refresh-btn').addEventListener('click', async () => {
 
 (async () => {
   await historyStore.open();
-  history = await historyStore.load();
+  snapshots = await historyStore.load();
   await refresh();
   setInterval(tick, 1000);
 })();
