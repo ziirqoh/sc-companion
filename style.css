@@ -311,3 +311,23 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-bottom-w
 .crate-status:empty { display: none; }
 #cr-add { border-color: var(--accent); color: var(--accent); }
 .material-card h3 .badge { font-size: 10px; vertical-align: middle; }
+
+/* crate commodity picker */
+.combo { position: relative; }
+.combo input { width: 100%; }
+.combo-list {
+  position: absolute; z-index: 20; left: 0; right: 0; top: calc(100% + 4px);
+  margin: 0; padding: 4px; list-style: none;
+  background: var(--panel-2); border: 1px solid var(--accent); border-radius: 8px;
+  max-height: 320px; overflow-y: auto; box-shadow: 0 10px 30px rgba(0, 0, 0, .5);
+}
+.combo-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; border-radius: 6px; cursor: pointer; color: var(--text); font-size: 13px; }
+.combo-list li .sub { white-space: nowrap; }
+.combo-list li:hover, .combo-list li.active { background: #1d3448; }
+.combo-list li.none { cursor: default; color: var(--muted); }
+.crate-row label { color: var(--muted); }
+
+/* one-stop result */
+.card.one-stop { min-width: 300px; max-width: 520px; }
+.card.one-stop .big { font-size: 24px; font-weight: 700; margin: 6px 0 2px; }
+.card.one-stop .sub { margin-top: 3px; }

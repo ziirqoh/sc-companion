@@ -309,7 +309,9 @@ function renderSellAll(items, keep, ids, cardItems, note) {
     const missing = items.filter(({ c }) => !shop.rows.has(c.id)).map((x) => x.c);
     const oldest = Math.min(...[...shop.rows.values()].map((p) => p.date_modified));
     return { ...shop, total, missing, limited, oldest };
-  }).sort((a, b) => b.total - a.total);
+  }).sort((a, b) => (a.missing.length === 0) !== (b.missing.length === 0) ? (a.missing.length === 0 ? -1 : 1) : b.total - a.total);
+  // Places that buy everything you carry, so you only make one stop.
+  const full = stops.filter((s) => !s.missing.length);
 
   // Selling each item where it's worth the most.
   const perItem = items.map(({ c, qty }) => {
@@ -317,22 +319,69 @@ function renderSellAll(items, keep, ids, cardItems, note) {
     return { c, best, value: best ? sellValue(best, qty) : 0 };
   });
   const splitTotal = perItem.reduce((s, x) => s + x.value, 0);
+  const splitStops = new Set(perItem.filter((x) => x.best).map((x) => x.best.id_terminal)).size;
   const top = stops[0];
+  const shopName = (s) => esc(terminalName(s.t) || [...s.rows.values()][0].terminal_name);
+  const priceList = (s) => items.map(({ c }) => s.rows.get(c.id) ? `${esc(shortName(c))} ${fmt(s.rows.get(c.id).price_sell)}` : null).filter(Boolean).join(' · ');
+
+  // When no single place buys everything, the best pair of places that does.
+  let pair = null;
+  if (items.length > 1 && !full.length) {
+    const candidates = stops.slice(0, 80);
+    const valueAt = (s, c, qty) => (s.rows.get(c.id) ? sellValue(s.rows.get(c.id), qty) : 0);
+    for (let i = 0; i < candidates.length; i++) {
+      for (let j = i + 1; j < candidates.length; j++) {
+        const a = candidates[i], b = candidates[j];
+        if (!items.every(({ c }) => a.rows.has(c.id) || b.rows.has(c.id))) continue;
+        const total = items.reduce((sum, { c, qty }) => sum + Math.max(valueAt(a, c, qty), valueAt(b, c, qty)), 0);
+        if (!pair || total > pair.total) {
+          const at = (s) => items.filter(({ c, qty }) => valueAt(s, c, qty) > 0 && valueAt(s, c, qty) >= valueAt(s === a ? b : a, c, qty)).map(({ c }) => esc(shortName(c)));
+          pair = { a, b, total, sellAtA: at(a), sellAtB: at(b) };
+        }
+      }
+    }
+  }
+
+  let oneStopCard = '';
+  if (items.length === 1 && top) {
+    oneStopCard = `<div class="card highlight"><div class="label">Best place to sell</div><div class="value">${shopName(top)}</div><div class="sub"><span class="good">${fmt(top.total)} aUEC</span> · ${esc(terminalPlace(top.t))}</div></div>`;
+  } else if (full.length) {
+    const f = full[0];
+    const gap = splitTotal - f.total;
+    oneStopCard = `
+      <div class="card highlight one-stop">
+        <div class="label">✓ Sell everything in one stop</div>
+        <div class="value">${shopName(f)}</div>
+        <div class="sub">${esc(terminalPlace(f.t))}${f.t?.max_container_size ? ` · max box ${f.t.max_container_size} SCU` : ''}</div>
+        <div class="big good">${fmt(f.total)} aUEC</div>
+        <div class="sub">${priceList(f)} per SCU</div>
+        <div class="sub">${gap > 0 ? `Only ${fmt(gap)} aUEC (${((gap / splitTotal) * 100).toFixed(1)}%) less than going to ${splitStops} separate places.` : 'Same as the best price for every item: no reason to go anywhere else.'}${f.limited.length ? ` <span class="warn">${f.limited.join(' · ')}</span>` : ''}</div>
+      </div>`;
+  } else if (pair) {
+    oneStopCard = `
+      <div class="card highlight one-stop">
+        <div class="label">No single place buys all of these. Best two stops:</div>
+        <div class="value">${shopName(pair.a)} + ${shopName(pair.b)}</div>
+        <div class="sub">Sell ${pair.sellAtA.join(', ')} at ${shopName(pair.a)}; ${pair.sellAtB.join(', ')} at ${shopName(pair.b)}</div>
+        <div class="big good">${fmt(pair.total)} aUEC</div>
+      </div>`;
+  }
 
   $(ids.summary).innerHTML = !items.length ? '' : `
     <div class="card"><div class="label">Your load</div><div class="value">${fmt(totalScu)} SCU</div><div class="sub">${items.map(({ c, qty }) => `${fmt(qty)} ${esc(shortName(c))}`).join(' · ')}</div></div>
-    ${top ? `<div class="card highlight"><div class="label">Best single stop</div><div class="value">${esc(terminalName(top.t) || '')}</div><div class="sub"><span class="good">${fmt(top.total)} aUEC</span> · ${esc(terminalPlace(top.t))}${top.missing.length ? ` · <span class="warn">doesn't buy ${top.missing.map((c) => esc(shortName(c))).join(', ')}</span>` : ''}</div></div>` : ''}
-    ${items.length > 1 ? `<div class="card"><div class="label">Selling each at its best place</div><div class="value">${fmt(splitTotal)} aUEC</div><div class="sub">${perItem.map((x) => x.best ? `${esc(shortName(x.c))} at ${esc(terminalName(terminalsById.get(x.best.id_terminal)) || x.best.terminal_name)}` : `${esc(shortName(x.c))}: nowhere`).join(' · ')}${top ? ` · <span class="${splitTotal > top.total ? 'good' : 'muted'}">${splitTotal > top.total ? '+' + fmt(splitTotal - top.total) + ' vs one stop' : 'no gain vs one stop'}</span>` : ''}</div></div>` : ''}`;
+    ${oneStopCard}
+    ${items.length > 1 ? `<div class="card"><div class="label">Selling each at its best place (${splitStops} stop${splitStops > 1 ? 's' : ''})</div><div class="value">${fmt(splitTotal)} aUEC</div><div class="sub">${perItem.map((x) => x.best ? `${esc(shortName(x.c))} at ${esc(terminalName(terminalsById.get(x.best.id_terminal)) || x.best.terminal_name)}` : `${esc(shortName(x.c))}: nowhere`).join('<br>')}</div></div>` : ''}`;
 
   $(ids.table).innerHTML = !items.length ? '' : !stops.length ? '<tr><td class="empty">No shop buys this with these filters. Try a wider system or older prices.</td></tr>' : `
     <thead><tr>
-      <th>#</th><th>Sell at</th>${items.map(({ c }) => `<th class="num">${esc(shortName(c))} / SCU</th>`).join('')}
+      <th>#</th><th>Sell at</th>${items.length > 1 ? '<th>Buys</th>' : ''}${items.map(({ c }) => `<th class="num">${esc(shortName(c))} / SCU</th>`).join('')}
       <th class="num">Your load is worth</th><th>Notes</th><th>Max box</th><th>Oldest report</th>
     </tr></thead>
     <tbody>${stops.slice(0, 30).map((s, i) => `
       <tr class="${i === 0 ? 'top' : ''}">
         <td class="muted">${i + 1}</td>
         <td><div class="loc">${esc(terminalName(s.t) || [...s.rows.values()][0].terminal_name)}</div><div class="sub">${esc(terminalPlace(s.t))}${s.t?.is_nqa ? ' · <span class="bad">no questions asked</span>' : ''}</div></td>
+        ${items.length > 1 ? `<td>${s.missing.length ? `<span class="warn">${items.length - s.missing.length} of ${items.length}</span>` : '<span class="good">✓ all</span>'}</td>` : ''}
         ${items.map(({ c }) => {
           const p = s.rows.get(c.id);
           return `<td class="num">${p ? fmt(p.price_sell) + delta(p.price_sell, p.prev?.price_sell) + `<div>${statusPill(p.status_sell, true)}</div>` : '<span class="muted">doesn\'t buy</span>'}</td>`;
@@ -382,11 +431,53 @@ function saveCratePrefs() {
 
 const commodityByName = (name) => data.commodities.find((c) => c.name.toLowerCase() === String(name).trim().toLowerCase());
 
+// Searchable commodity picker. The browser's own <datalist> was unreliable, so this is a small custom dropdown.
+let crateChoices = []; // [{ c, best }] for every commodity some shop buys
+let comboActive = -1;  // highlighted suggestion while using the keyboard
+
+function comboMatches(query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return crateChoices.slice(0, 10);
+  const starts = crateChoices.filter((x) => x.c.name.toLowerCase().startsWith(q));
+  const contains = crateChoices.filter((x) => !x.c.name.toLowerCase().startsWith(q) && `${x.c.name} ${x.c.code}`.toLowerCase().includes(q));
+  return [...starts, ...contains].slice(0, 10);
+}
+
+function showCombo(input) {
+  const list = input.parentElement.querySelector('.combo-list');
+  const matches = comboMatches(input.value);
+  comboActive = Math.min(comboActive, matches.length - 1);
+  list.innerHTML = matches.length ? matches.map((x, i) => `
+    <li class="${i === comboActive ? 'active' : ''}" data-name="${esc(x.c.name)}">
+      <span>${esc(x.c.name)} ${x.c.is_illegal ? '<span class="badge bad">Illegal</span>' : ''}</span>
+      <span class="sub">${esc(x.c.kind || '')}${x.best ? ` · up to ${fmt(x.best.price_sell)} / SCU` : ''}</span>
+    </li>`).join('') : '<li class="none">No commodity matches. Try another name.</li>';
+  list.hidden = false;
+}
+
+function hideCombos() {
+  document.querySelectorAll('#cr-rows .combo-list').forEach((l) => (l.hidden = true));
+  comboActive = -1;
+}
+
+function pickCrateCommodity(input, name) {
+  const cr = crates[Number(input.closest('.crate-row').dataset.index)];
+  cr.name = name;
+  input.value = name;
+  hideCombos();
+  saveCratePrefs();
+  renderCrates();
+  input.closest('.crate-row').querySelector('[data-field="qty"]').focus();
+}
+
 function drawCrateRows() {
   $('cr-rows').innerHTML = crates.map((cr, i) => `
     <div class="crate-row" data-index="${i}">
       <label class="wide">What's in the crate
-        <input type="text" list="cr-list" data-field="name" value="${esc(cr.name)}" placeholder="Type a commodity, e.g. Gold, Medical Supplies…" autocomplete="off">
+        <div class="combo">
+          <input type="text" data-field="name" value="${esc(cr.name)}" placeholder="Search a commodity, e.g. Titanium, Agricium…" autocomplete="off" spellcheck="false">
+          <ul class="combo-list" hidden></ul>
+        </div>
       </label>
       <label>SCU
         <input type="number" min="0" step="1" data-field="qty" value="${cr.qty || ''}" placeholder="0">
@@ -397,8 +488,10 @@ function drawCrateRows() {
 }
 
 function initCratesUi() {
-  const sellable = data.commodities.filter((c) => sellByCommodity.has(c.id)).sort((a, b) => a.name.localeCompare(b.name));
-  $('cr-list').innerHTML = sellable.map((c) => `<option value="${esc(c.name)}">`).join('');
+  crateChoices = data.commodities
+    .filter((c) => sellByCommodity.has(c.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((c) => ({ c, best: sellByCommodity.get(c.id)[0] }));
   const systems = [...new Set(data.terminals.map((t) => t.star_system_name).filter(Boolean))].sort();
   $('cr-system').innerHTML = '<option value="">All systems</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join('');
   const prefs = loadSalvagePrefs();
@@ -415,22 +508,29 @@ function renderCrates() {
   const system = $('cr-system').value;
   const keep = (p) => p.date_modified >= minDate && (!system || terminalsById.get(p.id_terminal)?.star_system_name === system);
 
-  // Merge crates of the same commodity, and flag names that don't match a known commodity.
+  // Merge crates of the same commodity. A name that matches nothing is only flagged once you leave the field.
   const merged = new Map();
   document.querySelectorAll('#cr-rows .crate-row').forEach((row) => {
     const cr = crates[Number(row.dataset.index)];
     const c = cr.name.trim() && commodityByName(cr.name);
+    const typing = document.activeElement === row.querySelector('[data-field="name"]');
     const status = row.querySelector('.crate-status');
-    if (!cr.name.trim()) status.innerHTML = '';
+    if (!cr.name.trim() || (!c && typing)) status.innerHTML = '';
     else if (!c) status.innerHTML = '<span class="warn">Unknown commodity. Pick one from the list.</span>';
-    else if (!sellByCommodity.has(c.id)) status.innerHTML = '<span class="warn">No shop buys this.</span>';
-    else status.innerHTML = cr.qty > 0 ? `<span class="good">≈ ${fmt(sellValue((sellByCommodity.get(c.id) || []).find(keep) || { price_sell: 0 }, cr.qty))} aUEC at best price</span>` : '';
+    else if (!cr.qty) status.innerHTML = '<span class="muted">Enter how many SCU.</span>';
+    else {
+      const best = (sellByCommodity.get(c.id) || []).filter(keep).reduce((a, p) => (!a || sellValue(p, cr.qty) > sellValue(a, cr.qty) ? p : a), null);
+      status.innerHTML = best
+        ? `<span class="good">≈ ${fmt(sellValue(best, cr.qty))} aUEC</span> at ${esc(terminalName(terminalsById.get(best.id_terminal)) || best.terminal_name)}`
+        : '<span class="warn">No buyer with these filters.</span>';
+    }
     if (c && cr.qty > 0 && sellByCommodity.has(c.id)) merged.set(c.id, { c, qty: (merged.get(c.id)?.qty || 0) + cr.qty });
   });
   const items = [...merged.values()];
 
+  $('cr-results').hidden = !items.length;
+  $('cr-empty').hidden = !!items.length;
   renderSellAll(items, keep, { summary: 'cr-summary', table: 'cr-table', cards: 'cr-cards' }, items, (c) => esc(c.kind || ''));
-  if (!items.length) $('cr-summary').innerHTML = '<div class="card">Add the crates you found: pick what\'s inside and how many SCU.</div>';
   $('cr-illegal').hidden = !items.some(({ c }) => c.is_illegal);
 }
 
@@ -474,10 +574,55 @@ $('cr-rows').addEventListener('input', (e) => {
   const row = e.target.closest('.crate-row');
   if (!row || !data) return;
   const cr = crates[Number(row.dataset.index)];
-  if (e.target.dataset.field === 'name') cr.name = e.target.value;
-  else cr.qty = Math.max(0, Number(e.target.value) || 0);
+  if (e.target.dataset.field === 'name') {
+    cr.name = e.target.value;
+    comboActive = -1;
+    showCombo(e.target);
+  } else {
+    cr.qty = Math.max(0, Number(e.target.value) || 0);
+  }
   saveCratePrefs();
   renderCrates();
+});
+
+$('cr-rows').addEventListener('focusin', (e) => {
+  if (e.target.dataset.field === 'name' && data) showCombo(e.target);
+});
+
+// Leaving the field closes the list and shows a warning if the name matches nothing.
+$('cr-rows').addEventListener('focusout', (e) => {
+  if (e.target.dataset.field !== 'name' || !data) return;
+  setTimeout(() => {
+    if (document.activeElement?.dataset.field === 'name') return;
+    hideCombos();
+    renderCrates();
+  }, 120);
+});
+
+$('cr-rows').addEventListener('keydown', (e) => {
+  const input = e.target;
+  if (input.dataset.field !== 'name') return;
+  const items = [...input.parentElement.querySelectorAll('.combo-list li[data-name]')];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (!items.length) return;
+    comboActive = (comboActive + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+    showCombo(input);
+  } else if (e.key === 'Enter') {
+    const pick = items[comboActive] || (items.length === 1 ? items[0] : null) ||
+      items.find((li) => li.dataset.name.toLowerCase() === input.value.trim().toLowerCase());
+    if (pick) { e.preventDefault(); pickCrateCommodity(input, pick.dataset.name); }
+  } else if (e.key === 'Escape') {
+    hideCombos();
+  }
+});
+
+// mousedown (not click) so the pick happens before the input loses focus.
+$('cr-rows').addEventListener('mousedown', (e) => {
+  const li = e.target.closest('.combo-list li[data-name]');
+  if (!li) return;
+  e.preventDefault();
+  pickCrateCommodity(li.closest('.combo').querySelector('input'), li.dataset.name);
 });
 
 $('cr-rows').addEventListener('click', (e) => {
@@ -503,3 +648,8 @@ $('cr-add').addEventListener('click', () => {
   saveCratePrefs();
   renderCrates();
 }));
+
+// Any click outside a picker closes its list.
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('.combo')) hideCombos();
+});

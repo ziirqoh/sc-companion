@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SC Companion</title>
-  <link rel="stylesheet" href="style.css?v=16">
+  <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
   <header>
@@ -254,7 +254,6 @@
     <section id="tab-sv-crates" class="panel">
       <p class="hint">Found cargo crates in a wreck or derelict? Add what's in each crate and how many SCU. You'll see where to sell it all, and how much it's worth.</p>
       <div id="cr-rows" class="crate-rows"></div>
-      <datalist id="cr-list"></datalist>
       <div class="form">
         <button id="cr-add" type="button">+ Add another crate</button>
         <label>Star system
@@ -270,11 +269,14 @@
         </label>
       </div>
       <p id="cr-illegal" class="warn-box" hidden>⚠ Some of these goods are <b>illegal</b>. Only some terminals buy them (marked <span class="bad">no questions asked</span>), and being scanned with them can get you fined or a CrimeStat.</p>
-      <div id="cr-summary" class="summary"></div>
-      <h2>Best places to sell your crates <small class="muted">· ranked by the total value of your load</small></h2>
-      <div class="table-wrap"><table id="cr-table"></table></div>
-      <h2>Best price for each crate</h2>
-      <div id="cr-cards" class="material-grid"></div>
+      <div id="cr-empty" class="card">Add the crates you found: search what's inside and enter how many SCU. Add several crates to find one place that buys them all.</div>
+      <div id="cr-results" hidden>
+        <div id="cr-summary" class="summary"></div>
+        <h2>Every place that buys your crates <small class="muted">· places that buy everything come first</small></h2>
+        <div class="table-wrap"><table id="cr-table"></table></div>
+        <h2>Best price for each crate</h2>
+        <div id="cr-cards" class="material-grid"></div>
+      </div>
 
       <h2>Finding and taking crates</h2>
       <div class="steps-grid">
@@ -432,6 +434,6 @@
   </footer>
 
   <script src="app.js?v=16"></script>
-  <script src="salvage.js?v=16"></script>
+  <script src="salvage.js?v=18"></script>
 </body>
 </html>
