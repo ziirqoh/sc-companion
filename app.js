@@ -13,7 +13,8 @@ let commoditiesById = new Map();
 let sellByCommodity = new Map(); // commodity id -> price rows of shops that buy it from you
 let historyIndex = new Map();    // "terminal:commodity" -> [{ t, scu_buy, scu_sell_stock }]
 let openSellRow = null;     // commodity id expanded in the Sell Finder
-let openRoute = null;       // route key expanded in Best Routes
+let openGroup = null;       // commodity id expanded in Best Routes
+let openRoute = null;       // route key expanded inside that commodity
 
 // ---------- helpers ----------
 
@@ -587,31 +588,69 @@ function renderRoutes() {
       ${planLines(best)}
     </div>`;
 
-  const others = plans.slice(1, 51);
-  const COLS = 9;
+  // One line per commodity (the item that earns the most on each route); click it for all its routes.
+  const groups = new Map();
+  for (const p of plans.slice(1)) {
+    const main = p.lines.reduce((a, l) => (l.margin * l.scu > a.margin * a.scu ? l : a));
+    if (!groups.has(main.c.id)) groups.set(main.c.id, { c: main.c, plans: [] });
+    groups.get(main.c.id).plans.push(p);
+  }
+  const oldestOf = (p) => Math.min(...p.lines.flatMap((l) => [l.b.date_modified, l.s.date_modified]));
+  const COLS = 10;
+
   $('p-table').innerHTML = `
     <thead><tr>
-      <th>#</th><th>Buy at</th><th>Sell at</th><th>What to buy</th><th class="num">Invest</th><th class="num">Profit</th>
-      <th class="num">Return</th><th class="num">Cargo used</th><th>Oldest report</th>
+      <th>#</th><th>Commodity</th><th>Best buy at</th><th>Best sell at</th><th class="num">Invest</th><th class="num">Profit</th>
+      <th class="num">Return</th><th class="num">Cargo used</th><th class="num">Routes</th><th>Oldest report</th>
     </tr></thead>
-    <tbody>${others.map((p, i) => {
-      const open = openRoute === p.key;
-      const oldest = Math.min(...p.lines.flatMap((l) => [l.b.date_modified, l.s.date_modified]));
+    <tbody>${[...groups.values()].slice(0, 30).map((g, i) => {
+      const p = g.plans[0];
+      const open = openGroup === g.c.id;
       return `
-      <tr class="clickable${open ? ' selected' : ''}" data-route="${p.key}">
-        <td class="muted">${open ? '▾' : '▸'} ${i + 2}</td>
+      <tr class="clickable${open ? ' selected' : ''}" data-group="${g.c.id}">
+        <td class="muted">${open ? '▾' : '▸'} ${i + 1}</td>
+        <td><div class="loc">${esc(g.c.name)}</div><div class="sub">${cargoWarnings(g.c)}${p.lines.length > 1 ? ` + ${p.lines.length - 1} other good${p.lines.length > 2 ? 's' : ''}` : ''}</div></td>
         <td>${locCell(p.lines[0].b)}</td>
         <td>${locCell(p.lines[0].s)}</td>
-        <td>${p.lines.map((l) => `${fmt(l.scu)} SCU ${esc(l.c.name)}`).join('<br>')}</td>
         <td class="num">${fmt(p.cost)}</td>
         <td class="num good">+${fmt(p.profit)}</td>
         <td class="num">${roi(p)}</td>
         <td class="num">${fmt(p.scu)}</td>
-        <td class="${ageClass(oldest)}">${ago(oldest)}</td>
+        <td class="num">${g.plans.length}</td>
+        <td class="${ageClass(oldestOf(p))}">${ago(oldestOf(p))}</td>
       </tr>
-      ${open ? `<tr class="detail"><td colspan="${COLS}">${planLines(p)}</td></tr>` : ''}`;
+      ${open ? `<tr class="detail"><td colspan="${COLS}">${groupRoutes(g, roi, oldestOf)}</td></tr>` : ''}`;
     }).join('')}
     </tbody>`;
+}
+
+// Every route for one commodity, best first. Click a route for its full buy list.
+function groupRoutes(g, roi, oldestOf) {
+  const COLS = 8;
+  return `
+    <table class="inner">
+      <thead><tr>
+        <th>Buy at</th><th>Sell at</th><th>What to buy</th><th class="num">Invest</th><th class="num">Profit</th>
+        <th class="num">Return</th><th class="num">Cargo used</th><th>Oldest report</th>
+      </tr></thead>
+      <tbody>${g.plans.slice(0, 25).map((p) => {
+        const open = openRoute === p.key;
+        return `
+        <tr class="clickable${open ? ' selected' : ''}" data-route="${p.key}">
+          <td>${locCell(p.lines[0].b)}</td>
+          <td>${locCell(p.lines[0].s)}</td>
+          <td>${open ? '▾' : '▸'} ${p.lines.map((l) => `${fmt(l.scu)} SCU ${esc(l.c.name)}`).join('<br>')}</td>
+          <td class="num">${fmt(p.cost)}</td>
+          <td class="num good">+${fmt(p.profit)}</td>
+          <td class="num">${roi(p)}</td>
+          <td class="num">${fmt(p.scu)}</td>
+          <td class="${ageClass(oldestOf(p))}">${ago(oldestOf(p))}</td>
+        </tr>
+        ${open ? `<tr class="detail"><td colspan="${COLS}">${planLines(p)}</td></tr>` : ''}`;
+      }).join('')}
+      </tbody>
+    </table>
+    ${g.plans.length > 25 ? `<div class="sub" style="margin-top:6px">Showing the best 25 of ${g.plans.length} routes.</div>` : ''}`;
 }
 
 // ---------- Commodity guide ----------
@@ -689,8 +728,8 @@ const on = (ids, evt, fn) => ids.forEach((id) => $(id).addEventListener(evt, () 
 on(['s-location'], 'change', () => { openSellRow = null; renderSell(); });
 on(['s-cargo', 's-budget'], 'input', renderSell);
 on(['s-sort', 's-cross'], 'change', renderSell);
-on(['p-budget', 'p-cargo'], 'input', () => { openRoute = null; renderRoutes(); });
-on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal'], 'change', () => { openRoute = null; renderRoutes(); });
+on(['p-budget', 'p-cargo'], 'input', () => { openGroup = openRoute = null; renderRoutes(); });
+on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
 on(['c-filter'], 'input', renderCommodities);
 on(['c-kind'], 'change', renderCommodities);
 
@@ -703,9 +742,15 @@ $('s-table').addEventListener('click', (e) => {
 });
 
 $('p-table').addEventListener('click', (e) => {
-  const tr = e.target.closest('tr[data-route]');
-  if (!tr) return;
-  openRoute = openRoute === tr.dataset.route ? null : tr.dataset.route;
+  const route = e.target.closest('tr[data-route]');
+  const group = e.target.closest('tr[data-group]');
+  if (route) {
+    openRoute = openRoute === route.dataset.route ? null : route.dataset.route;
+  } else if (group) {
+    const id = Number(group.dataset.group);
+    openGroup = openGroup === id ? null : id;
+    openRoute = null;
+  } else return;
   renderRoutes();
 });
 
