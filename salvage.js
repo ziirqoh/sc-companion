@@ -385,7 +385,7 @@ function renderSellAll(items, keep, ids, cardItems, note) {
     <tbody>${stops.slice(0, 30).map((s, i) => `
       <tr class="${i === 0 ? 'top' : ''}">
         <td class="muted">${i + 1}</td>
-        <td><div class="loc">${esc(terminalName(s.t) || [...s.rows.values()][0].terminal_name)}</div><div class="sub">${esc(terminalPlace(s.t))}${s.t?.is_nqa ? ' · <span class="bad">no questions asked</span>' : ''}</div></td>
+        <td><div class="loc">${esc(terminalName(s.t) || [...s.rows.values()][0].terminal_name)}${autoloadTag(s.t)}</div><div class="sub">${esc(terminalPlace(s.t))}${s.t?.is_nqa ? ' · <span class="bad">no questions asked</span>' : ''}</div></td>
         ${items.length > 1 ? `<td>${s.missing.length ? `<span class="warn">${items.length - s.missing.length} of ${items.length}</span>` : '<span class="good">✓ all</span>'}</td>` : ''}
         ${items.map(({ c }) => {
           const p = s.rows.get(c.id);

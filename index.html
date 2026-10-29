@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SC Companion</title>
-  <link rel="stylesheet" href="style.css?v=17">
+  <link rel="stylesheet" href="style.css?v=21">
 </head>
 <body>
   <header>
@@ -165,6 +165,7 @@
         <label class="check"><input id="p-same" type="checkbox" checked> Stay in one system</label>
         <label class="check"><input id="p-mix" type="checkbox" checked> Mix goods to fill the hold</label>
         <label class="check loop-check" title="After selling, buy what the second location sells and the first location buys back, so you never fly empty"><input id="p-loop" type="checkbox"> Loop (round trip)</label>
+        <label class="check" title="Only routes where both the buy and the sell terminal load cargo onto your ship automatically"><input id="p-autoload" type="checkbox"> ⇅ Autoload only</label>
         <label class="check"><input id="p-illegal" type="checkbox"> Include illegal goods</label>
       </div>
       <div id="p-plan"></div>
@@ -437,7 +438,7 @@
   </footer>
 
   <script src="shape.js?v=19"></script>
-  <script src="app.js?v=20"></script>
-  <script src="salvage.js?v=19"></script>
+  <script src="app.js?v=21"></script>
+  <script src="salvage.js?v=21"></script>
 </body>
 </html>

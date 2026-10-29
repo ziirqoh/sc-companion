@@ -67,9 +67,12 @@ function terminalPlace(t) {
   return [t.star_system_name, body, where !== terminalName(t) ? where : null].filter(Boolean).join(' › ');
 }
 
+// Tag for terminals where bought cargo is loaded onto your ship automatically.
+const autoloadTag = (t) => (t?.is_auto_load ? ' <span class="autoload" title="Autoload: cargo is moved to and from your ship automatically at this terminal">⇅ Autoload</span>' : '');
+
 function locCell(row) {
   const t = terminalsById.get(row.id_terminal);
-  return `<div class="loc">${esc(t ? terminalName(t) : row.terminal_name)}</div><div class="sub">${esc(terminalPlace(t))}</div>`;
+  return `<div class="loc">${esc(t ? terminalName(t) : row.terminal_name)}${autoloadTag(t)}</div><div class="sub">${esc(terminalPlace(t))}</div>`;
 }
 
 function statusPill(s, sellSide = false) {
@@ -95,7 +98,7 @@ function cargoWarnings(c) {
 }
 
 const PREF_VALUES = ['s-location', 's-cargo', 's-budget', 's-sort', 'p-budget', 'p-cargo', 'p-start-system', 'p-end-system', 'p-from', 'p-age'];
-const PREF_CHECKS = ['s-cross', 'p-same', 'p-mix', 'p-illegal', 'p-loop'];
+const PREF_CHECKS = ['s-cross', 'p-same', 'p-mix', 'p-illegal', 'p-loop', 'p-autoload'];
 
 function savePrefs() {
   const prefs = {};
@@ -378,7 +381,6 @@ function renderSell() {
   const features = [];
   if (here?.has_loading_dock) features.push('Loading dock');
   if (here?.has_freight_elevator) features.push('Freight elevator');
-  if (here?.is_auto_load) features.push('Auto-load');
   if (here?.is_refuel) features.push('Refuel');
   if (here?.is_repair) features.push('Repair');
   if (here?.is_nqa) features.push('<span class="bad">No questions asked</span>');
@@ -386,7 +388,7 @@ function renderSell() {
     .filter((x) => x.margin > 0 && x.scu > 0 && !outOfStock(x.g))
     .reduce((a, b) => (!a || b.profit > a.profit ? b : a), null);
   $('s-summary').innerHTML = !here ? '' : `
-    <div class="card"><div class="label">You are at</div><div class="value">${esc(terminalName(here))}</div><div class="sub">${esc(terminalPlace(here))}${here.faction_name ? ' · ' + esc(here.faction_name) : ''}</div></div>
+    <div class="card"><div class="label">You are at</div><div class="value">${esc(terminalName(here))}${autoloadTag(here)}</div><div class="sub">${esc(terminalPlace(here))}${here.faction_name ? ' · ' + esc(here.faction_name) : ''}</div></div>
     <div class="card"><div class="label">Shop</div><div class="value">${goods.length} goods for sale</div><div class="sub">Max box ${here.max_container_size ? here.max_container_size + ' SCU' : '—'}${features.length ? ' · ' + features.join(' · ') : ''}</div></div>
     ${top ? `<div class="card highlight"><div class="label">Best buy here for ${fmt(top.scu)} SCU</div><div class="value">${esc(top.c?.name || top.g.commodity_name)} → ${esc(terminalName(terminalsById.get(top.best.id_terminal)) || top.best.terminal_name)}</div><div class="sub"><span class="good">+${fmt(top.margin)} / SCU · ${fmt(top.profit)} aUEC profit</span> for ${fmt(top.g.price_buy * top.scu)} invested</div></div>` : ''}`;
 
@@ -514,13 +516,14 @@ function plannerOptions() {
     mix: $('p-mix').checked,
     illegal: $('p-illegal').checked,
     loop: $('p-loop').checked,
+    autoload: $('p-autoload').checked,
     maxAgeHours: Number($('p-age').value) || null,
     only: null, // optional (commodity) => boolean
   };
 }
 
 function planRoutes(opts = plannerOptions()) {
-  const { budget, cargo, fromId, startSystem, endSystem, mix, illegal, loop, maxAgeHours, only } = opts;
+  const { budget, cargo, fromId, startSystem, endSystem, mix, illegal, loop, autoload, maxAgeHours, only } = opts;
   // Picking both systems decides the trip, so "Stay in one system" only applies while one of them is "Any".
   const sameSystem = opts.sameSystem && !(startSystem && endSystem);
   const minDate = maxAgeHours ? Date.now() / 1000 - maxAgeHours * 3600 : 0;
@@ -542,6 +545,7 @@ function planRoutes(opts = plannerOptions()) {
       if (s.id_terminal === b.id_terminal || s.date_modified < minDate) continue;
       const st = terminalsById.get(s.id_terminal);
       if (sameSystem && sys(bt) !== sys(st)) continue;
+      if (autoload && !(bt?.is_auto_load && st?.is_auto_load)) continue; // autoload at both the buy and the sell terminal
       if (!outbound(bt, st) && !(loop && outbound(st, bt))) continue;
       const key = `${b.id_terminal}>${s.id_terminal}`;
       if (!pairs.has(key)) pairs.set(key, { key, bt, st, buyId: b.id_terminal, sellId: s.id_terminal, items: [] });
@@ -644,9 +648,9 @@ function planCard(best, budget, cargo) {
         <div>
           <div class="label">${best.loop ? 'Recommended loop' : 'Recommended'} for ${budget ? fmt(budget) + ' aUEC' : 'any budget'} and ${fmt(cargo)} SCU</div>
           <div class="route">
-            <span>${routeName(best.lines[0].b, best.bt)}<small>${esc(terminalPlace(best.bt))}</small></span>
+            <span>${routeName(best.lines[0].b, best.bt)}${autoloadTag(best.bt)}<small>${esc(terminalPlace(best.bt))}</small></span>
             <span class="arrow">${best.loop ? '⇄' : '→'}</span>
-            <span>${routeName(best.lines[0].s, best.st)}<small>${esc(terminalPlace(best.st))}${boxNote}</small></span>
+            <span>${routeName(best.lines[0].s, best.st)}${autoloadTag(best.st)}<small>${esc(terminalPlace(best.st))}${boxNote}</small></span>
           </div>
         </div>
         <div class="plan-stats">
@@ -1039,7 +1043,7 @@ on(['s-cargo', 's-budget'], 'input', renderSell);
 on(['s-sort', 's-cross'], 'change', renderSell);
 on(['p-budget', 'p-cargo'], 'input', () => { openGroup = openRoute = null; renderRoutes(); });
 on(['p-start-system', 'p-end-system'], 'change', () => { updatePlannerControls(); openGroup = openRoute = null; renderRoutes(); });
-on(['p-from', 'p-age', 'p-same', 'p-mix', 'p-illegal', 'p-loop'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
+on(['p-from', 'p-age', 'p-same', 'p-mix', 'p-illegal', 'p-loop', 'p-autoload'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
 on(['c-filter'], 'input', () => {
   // Typing a commodity's exact name or code (or narrowing to one result) opens it straight away.
   const filter = $('c-filter').value.trim().toLowerCase();

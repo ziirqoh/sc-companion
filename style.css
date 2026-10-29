@@ -331,3 +331,5 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-bottom-w
 .card.one-stop { min-width: 300px; max-width: 520px; }
 .card.one-stop .big { font-size: 24px; font-weight: 700; margin: 6px 0 2px; }
 .card.one-stop .sub { margin-top: 3px; }
+
+.autoload { display: inline-block; margin-left: 6px; padding: 0 6px; border: 1px solid #2c6b8f; border-radius: 9px; color: var(--accent); font-size: 10px; font-weight: 500; vertical-align: middle; white-space: nowrap; }
