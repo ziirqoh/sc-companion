@@ -23,80 +23,73 @@
   </header>
 
   <nav>
-    <button class="tab active" data-tab="route">Sell Finder</button>
-    <button class="tab" data-tab="best">Best Routes</button>
-    <button class="tab" data-tab="inventory">Shop Inventory</button>
+    <button class="tab active" data-tab="sell">Sell Finder</button>
+    <button class="tab" data-tab="routes">Best Routes</button>
     <button class="tab" data-tab="commodities">Commodity Guide</button>
   </nav>
 
   <main>
-    <!-- Sell finder: I bought X at Y for Z, where do I sell? -->
-    <section id="tab-route" class="panel active">
-      <p class="hint">Pick what you're buying and where. The list ranks every place that buys it back, best price first.</p>
+    <!-- Sell finder: I'm at this location, what can I buy here and where do I sell it? -->
+    <section id="tab-sell" class="panel active">
+      <p class="hint">Choose where you are. You'll see what this shop sells right now, its price and stock, and where to sell each item for the most profit. Click a row for every sell location and its 24 h stock history.</p>
       <div class="form">
-        <label>Commodity
-          <select id="r-commodity"></select>
+        <label class="wide">Your location
+          <select id="s-location"></select>
         </label>
-        <label>Buying at
-          <select id="r-terminal"></select>
-        </label>
-        <label>Price paid / SCU (aUEC)
-          <input id="r-price" type="number" min="0" step="1">
-        </label>
-        <label>Cargo (SCU)
-          <input id="r-cargo" type="number" min="1" step="1" value="96">
+        <label>Cargo space (SCU)
+          <input id="s-cargo" type="number" min="1" step="1" value="96">
         </label>
         <label>Budget (aUEC, optional)
-          <input id="r-budget" type="number" min="0" step="1000" placeholder="no limit">
+          <input id="s-budget" type="number" min="0" step="1000" placeholder="no limit">
         </label>
         <label>Sort by
-          <select id="r-sort">
-            <option value="sell">Best price / SCU</option>
-            <option value="profit">Best total profit</option>
+          <select id="s-sort">
+            <option value="profit">Total profit (your cargo)</option>
+            <option value="margin">Profit per SCU</option>
           </select>
         </label>
-        <label class="check"><input id="r-cross" type="checkbox" checked> Include other star systems</label>
+        <label class="check"><input id="s-cross" type="checkbox" checked> Sell in other star systems</label>
       </div>
-      <div id="r-summary" class="summary"></div>
-      <div class="table-wrap"><table id="r-table"></table></div>
+      <div id="s-summary" class="summary"></div>
+      <h2>For sale here</h2>
+      <div class="table-wrap"><table id="s-table"></table></div>
+      <details id="s-buys-wrap" class="more">
+        <summary>What this shop buys from you</summary>
+        <div class="table-wrap"><table id="s-buys"></table></div>
+      </details>
     </section>
 
-    <!-- Best routes across the whole verse -->
-    <section id="tab-best" class="panel">
-      <p class="hint">The most profitable buy → sell pairs right now, for your cargo hold and budget.</p>
+    <!-- Investment planner -->
+    <section id="tab-routes" class="panel">
+      <p class="hint">Enter how much you want to invest and your cargo space. You'll get the best thing to buy, where to buy it, and where to sell it. If one item can't fill your hold, the plan adds others on the same route.</p>
       <div class="form">
-        <label>Cargo (SCU)
-          <input id="b-cargo" type="number" min="1" step="1" value="96">
+        <label>Investment (aUEC)
+          <input id="p-budget" type="number" min="0" step="1000" value="250000">
         </label>
-        <label>Budget (aUEC, optional)
-          <input id="b-budget" type="number" min="0" step="1000" placeholder="no limit">
-        </label>
-        <label>Star system
-          <select id="b-system"><option value="">All systems</option></select>
+        <label>Cargo space (SCU)
+          <input id="p-cargo" type="number" min="1" step="1" value="96">
         </label>
         <label>Start from
-          <select id="b-from"><option value="">Anywhere</option></select>
+          <select id="p-from"><option value="">Anywhere</option></select>
         </label>
-        <label class="check"><input id="b-same" type="checkbox" checked> Stay in one system</label>
-        <label class="check"><input id="b-illegal" type="checkbox"> Include illegal goods</label>
+        <label>Star system
+          <select id="p-system"><option value="">All systems</option></select>
+        </label>
+        <label>Prices reported within
+          <select id="p-age">
+            <option value="24">24 hours</option>
+            <option value="72" selected>3 days</option>
+            <option value="168">7 days</option>
+            <option value="">Any age</option>
+          </select>
+        </label>
+        <label class="check"><input id="p-same" type="checkbox" checked> Stay in one system</label>
+        <label class="check"><input id="p-mix" type="checkbox" checked> Mix goods to fill the hold</label>
+        <label class="check"><input id="p-illegal" type="checkbox"> Include illegal goods</label>
       </div>
-      <div class="table-wrap"><table id="b-table"></table></div>
-    </section>
-
-    <!-- Shop inventory, updated every 15 min -->
-    <section id="tab-inventory" class="panel">
-      <p class="hint">What a commodity shop has in storage. Data refreshes every 15 minutes; ▲▼ show changes since the previous refresh. Click a row for its stock history.</p>
-      <div class="form">
-        <label class="wide">Shop
-          <select id="i-terminal"></select>
-        </label>
-        <label>Filter
-          <input id="i-filter" type="search" placeholder="commodity name…">
-        </label>
-      </div>
-      <div id="i-info" class="summary"></div>
-      <div class="table-wrap"><table id="i-table"></table></div>
-      <div id="i-history" class="history"></div>
+      <div id="p-plan"></div>
+      <h2>Other good routes</h2>
+      <div class="table-wrap"><table id="p-table"></table></div>
     </section>
 
     <!-- Commodity encyclopedia -->
@@ -115,7 +108,7 @@
   </main>
 
   <footer>
-    <p>Data: <a href="https://uexcorp.space" target="_blank" rel="noopener">UEX Corp</a> community reports. Prices and stock are reported by players, so check the "reported" age before a long haul. This site never connects to or modifies the game.</p>
+    <p>Data: <a href="https://uexcorp.space" target="_blank" rel="noopener">UEX Corp</a> community reports, refreshed every 15 minutes. Prices and stock are reported by players, so check the "reported" age before a long haul. This site never connects to or modifies the game.</p>
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 

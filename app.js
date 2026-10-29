@@ -3,12 +3,17 @@
 const $ = (id) => document.getElementById(id);
 
 const STATUS = { 1: 'Out of stock', 2: 'Very low', 3: 'Low', 4: 'Medium', 5: 'High', 6: 'Very high', 7: 'Max' };
+// For a shop that buys from you, an empty inventory is good news (it pays full price), so colours flip.
+const SELL_STATUS = { 1: 'Empty', 2: 'Very low', 3: 'Low', 4: 'Medium', 5: 'High', 6: 'Very high', 7: 'Full' };
 const PREFS_KEY = 'sc-trade-companion';
 
-let data = null;          // { commodities, terminals, prices, fetchedAt, nextRefreshAt }
+let data = null;            // { commodities, terminals, prices, fetchedAt }
 let terminalsById = new Map();
 let commoditiesById = new Map();
-let selectedHistory = null; // { terminal, commodity } of the inventory row being charted
+let sellByCommodity = new Map(); // commodity id -> price rows of shops that buy it from you
+let historyIndex = new Map();    // "terminal:commodity" -> [{ t, scu_buy, scu_sell_stock }]
+let openSellRow = null;     // commodity id expanded in the Sell Finder
+let openRoute = null;       // route key expanded in Best Routes
 
 // ---------- helpers ----------
 
@@ -41,8 +46,10 @@ function terminalPlace(t) {
   return [t.star_system_name, body, where !== terminalName(t) ? where : null].filter(Boolean).join(' › ');
 }
 
-// For a shop that buys from you, an empty inventory is good news (it pays full price), so colours flip.
-const SELL_STATUS = { 1: 'Empty', 2: 'Very low', 3: 'Low', 4: 'Medium', 5: 'High', 6: 'Very high', 7: 'Full' };
+function locCell(row) {
+  const t = terminalsById.get(row.id_terminal);
+  return `<div class="loc">${esc(t ? terminalName(t) : row.terminal_name)}</div><div class="sub">${esc(terminalPlace(t))}</div>`;
+}
 
 function statusPill(s, sellSide = false) {
   if (!s) return '<span class="muted">—</span>';
@@ -57,10 +64,22 @@ function delta(now, before) {
   return `<span class="delta ${d > 0 ? 'good' : 'bad'}">${d > 0 ? '▲' : '▼'}${fmt(Math.abs(d))}</span>`;
 }
 
+function cargoWarnings(c) {
+  return [
+    c?.is_illegal && '<span class="badge bad">Illegal</span>',
+    c?.is_volatile_qt && '<span class="badge warn">QT volatile</span>',
+    c?.is_volatile_time && '<span class="badge warn">Perishable</span>',
+    c?.is_explosive && '<span class="badge warn">Explosive</span>',
+  ].filter(Boolean).join('');
+}
+
+const PREF_VALUES = ['s-location', 's-cargo', 's-budget', 's-sort', 'p-budget', 'p-cargo', 'p-from', 'p-system', 'p-age'];
+const PREF_CHECKS = ['s-cross', 'p-same', 'p-mix', 'p-illegal'];
+
 function savePrefs() {
   const prefs = {};
-  for (const id of ['r-commodity', 'r-terminal', 'r-cargo', 'r-budget', 'r-sort', 'b-cargo', 'b-budget', 'b-system', 'b-from', 'i-terminal']) prefs[id] = $(id).value;
-  for (const id of ['r-cross', 'b-same', 'b-illegal']) prefs[id] = $(id).checked;
+  for (const id of PREF_VALUES) prefs[id] = $(id).value;
+  for (const id of PREF_CHECKS) prefs[id] = $(id).checked;
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(prefs)); } catch {}
 }
 
@@ -68,10 +87,10 @@ function loadPrefs() {
   try { return JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { return {}; }
 }
 
-function setOptions(select, options, keepValue = true) {
+function setOptions(select, options) {
   const current = select.value;
   select.innerHTML = options;
-  if (keepValue && [...select.options].some((o) => o.value === current)) select.value = current;
+  if ([...select.options].some((o) => o.value === current)) select.value = current;
 }
 
 function terminalOptions(terminals) {
@@ -85,11 +104,17 @@ function terminalOptions(terminals) {
     `<optgroup label="${esc(sys)}">` +
     bySystem.get(sys)
       .sort((a, b) => terminalName(a).localeCompare(terminalName(b)))
-      .map((t) => `<option value="${t.id}">${esc(terminalName(t))}${terminalPlace(t) ? ' — ' + esc(terminalPlace(t).replace(sys + ' › ', '')) : ''}</option>`)
+      .map((t) => {
+        const rest = terminalPlace(t).split(' › ').filter((part) => part !== sys).join(' › ');
+        return `<option value="${t.id}">${esc(terminalName(t))}${rest ? ' — ' + esc(rest) : ''}</option>`;
+      })
       .join('') +
     '</optgroup>'
   ).join('');
 }
+
+// A shop reporting "out of stock" with 0 SCU really has nothing; 0 SCU with another status just means unknown.
+const outOfStock = (b) => b.status_buy === 1 && !(b.scu_buy > 0);
 
 // How many SCU you can actually move on a route.
 function tradeableScu({ cargo, budget, buyPrice, buyStock, sellDemand }) {
@@ -98,6 +123,20 @@ function tradeableScu({ cargo, budget, buyPrice, buyStock, sellDemand }) {
   if (sellDemand > 0) scu = Math.min(scu, sellDemand);
   if (budget > 0 && buyPrice > 0) scu = Math.min(scu, Math.floor(budget / buyPrice));
   return Math.max(0, scu);
+}
+
+// Small inline chart of a shop's stock over the last 24 h of refreshes.
+function sparkline(terminal, commodity, key) {
+  const series = historyIndex.get(`${terminal}:${commodity}`) || [];
+  if (series.length < 2) return '<span class="muted sub" title="Builds up while this page is open: one point every 15 minutes">collecting…</span>';
+  const W = 110, H = 26;
+  const vals = series.map((s) => s[key] || 0);
+  const max = Math.max(...vals, 1);
+  const t0 = series[0].t, t1 = series[series.length - 1].t;
+  const pts = series.map((s, i) => `${(((s.t - t0) / Math.max(1, t1 - t0)) * (W - 4) + 2).toFixed(1)},${(H - 3 - (vals[i] / max) * (H - 6)).toFixed(1)}`).join(' ');
+  const first = vals[0], last = vals[vals.length - 1];
+  const title = `${fmt(first)} → ${fmt(last)} SCU over ${series.length} refreshes (${new Date(t0).toLocaleTimeString()} – ${new Date(t1).toLocaleTimeString()})`;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><title>${esc(title)}</title><polyline points="${pts}" fill="none" stroke="#3fc1ff" stroke-width="1.5"/></svg>`;
 }
 
 // ---------- data loading ----------
@@ -165,9 +204,9 @@ async function refresh() {
       getApi('commodities_prices_all'),
     ]);
 
-    // Previous snapshot, so the inventory table can show what changed.
     // A page reload minutes after the last refresh replaces that snapshot instead of adding a near-duplicate.
     if (history.length && Date.now() - history[history.length - 1].t < 5 * 60 * 1000) history.pop();
+    // Previous snapshot, so tables can show what changed.
     const prev = new Map();
     const last = history[history.length - 1];
     if (last) for (const r of last.rows) prev.set(`${r[0]}:${r[1]}`, r);
@@ -202,8 +241,7 @@ async function refresh() {
     if (history.length > HISTORY_KEEP) history.splice(0, history.length - HISTORY_KEEP);
     historyStore.save(history);
 
-    terminalsById = new Map(data.terminals.map((t) => [t.id, t]));
-    commoditiesById = new Map(data.commodities.map((c) => [c.id, c]));
+    buildIndexes();
     lastError = null;
     initSelectors();
     renderAll();
@@ -216,13 +254,26 @@ async function refresh() {
   }
 }
 
-function historyFor(terminal, commodity) {
-  const series = [];
-  for (const snap of history) {
-    const r = snap.rows.find((row) => row[0] === terminal && row[1] === commodity);
-    if (r) series.push({ t: snap.t, price_buy: r[2], price_sell: r[3], scu_buy: r[4], scu_sell_stock: r[5], scu_sell: r[6] });
+function buildIndexes() {
+  terminalsById = new Map(data.terminals.map((t) => [t.id, t]));
+  commoditiesById = new Map(data.commodities.map((c) => [c.id, c]));
+
+  sellByCommodity = new Map();
+  for (const p of data.prices) {
+    if (!(p.price_sell > 0)) continue;
+    if (!sellByCommodity.has(p.id_commodity)) sellByCommodity.set(p.id_commodity, []);
+    sellByCommodity.get(p.id_commodity).push(p);
   }
-  return series;
+  for (const list of sellByCommodity.values()) list.sort((a, b) => b.price_sell - a.price_sell);
+
+  historyIndex = new Map();
+  for (const snap of history) {
+    for (const r of snap.rows) {
+      const key = `${r[0]}:${r[1]}`;
+      if (!historyIndex.has(key)) historyIndex.set(key, []);
+      historyIndex.get(key).push({ t: snap.t, scu_buy: r[4], scu_sell_stock: r[5] });
+    }
+  }
 }
 
 function updateStatus() {
@@ -246,294 +297,321 @@ function tick() {
 let selectorsReady = false;
 
 function initSelectors() {
-  const prefs = selectorsReady ? {} : loadPrefs();
-
-  // Commodities that can be bought somewhere.
-  const buyable = new Set(data.prices.filter((p) => p.price_buy > 0).map((p) => p.id_commodity));
-  const commodities = data.commodities.filter((c) => buyable.has(c.id)).sort((a, b) => a.name.localeCompare(b.name));
-  setOptions($('r-commodity'), commodities.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join(''));
+  const sellsSomething = new Set(data.prices.filter((p) => p.price_buy > 0).map((p) => p.id_terminal));
+  const shops = data.terminals.filter((t) => sellsSomething.has(t.id));
+  setOptions($('s-location'), terminalOptions(shops));
+  setOptions($('p-from'), '<option value="">Anywhere</option>' + terminalOptions(shops));
 
   const systems = [...new Set(data.terminals.map((t) => t.star_system_name).filter(Boolean))].sort();
-  setOptions($('b-system'), '<option value="">All systems</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join(''));
-
-  const tradingTerminals = new Set(data.prices.map((p) => p.id_terminal));
-  const shops = data.terminals.filter((t) => tradingTerminals.has(t.id));
-  setOptions($('i-terminal'), terminalOptions(shops));
-  setOptions($('b-from'), '<option value="">Anywhere</option>' + terminalOptions(shops.filter((t) => data.prices.some((p) => p.id_terminal === t.id && p.price_buy > 0))));
+  setOptions($('p-system'), '<option value="">All systems</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join(''));
 
   const kinds = [...new Set(data.commodities.map((c) => c.kind).filter(Boolean))].sort();
   setOptions($('c-kind'), '<option value="">All kinds</option>' + kinds.map((k) => `<option>${esc(k)}</option>`).join(''));
 
   if (!selectorsReady) {
+    const prefs = loadPrefs();
     for (const [id, v] of Object.entries(prefs)) {
       const el = $(id);
       if (!el) continue;
       if (typeof v === 'boolean') el.checked = v;
       else if (el.tagName !== 'SELECT' || [...el.options].some((o) => o.value === v)) el.value = v;
     }
-    // Default to the classic example: Construction Materials bought at Levski.
-    if (!prefs['r-commodity']) {
-      const cm = commodities.find((c) => c.name === 'Construction Materials');
-      if (cm) $('r-commodity').value = cm.id;
+    if (!prefs['s-location']) {
+      const levski = shops.find((t) => terminalName(t) === 'Levski');
+      if (levski) $('s-location').value = levski.id;
     }
+    selectorsReady = true;
   }
-  updateRouteTerminals(selectorsReady ? null : prefs['r-terminal'] || 'Levski');
-  selectorsReady = true;
 }
 
-// Fill "Buying at" with terminals that sell the chosen commodity.
-function updateRouteTerminals(preferred) {
-  const cid = Number($('r-commodity').value);
-  const rows = data.prices.filter((p) => p.id_commodity === cid && p.price_buy > 0);
-  const terms = rows.map((p) => terminalsById.get(p.id_terminal) || { id: p.id_terminal, name: p.terminal_name });
-  const before = $('r-terminal').value;
-  setOptions($('r-terminal'), terminalOptions(terms));
-  if (preferred) {
-    const match = [...$('r-terminal').options].find((o) => o.value === String(preferred) || o.textContent.startsWith(preferred));
-    if (match) $('r-terminal').value = match.value;
-  }
-  if ($('r-terminal').value !== before || !$('r-price').value) fillRoutePrice();
-}
+// ---------- Sell Finder ----------
 
-function fillRoutePrice() {
-  const row = currentBuyRow();
-  $('r-price').value = row ? row.price_buy : '';
-}
+function renderSell() {
+  const tid = Number($('s-location').value);
+  const here = terminalsById.get(tid);
+  const cargo = num($('s-cargo')) || 0;
+  const budget = num($('s-budget'));
+  const cross = $('s-cross').checked;
+  const sortBy = $('s-sort').value;
+  const rows = data.prices.filter((p) => p.id_terminal === tid);
 
-function currentBuyRow() {
-  const cid = Number($('r-commodity').value);
-  const tid = Number($('r-terminal').value);
-  return data.prices.find((p) => p.id_commodity === cid && p.id_terminal === tid);
-}
-
-// ---------- Sell finder ----------
-
-function renderRoute() {
-  const cid = Number($('r-commodity').value);
-  const buyRow = currentBuyRow();
-  const from = terminalsById.get(Number($('r-terminal').value));
-  const price = num($('r-price')) ?? buyRow?.price_buy ?? 0;
-  const cargo = num($('r-cargo')) || 0;
-  const budget = num($('r-budget'));
-  const cross = $('r-cross').checked;
-  const sortBy = $('r-sort').value;
-
-  const sells = data.prices
-    .filter((p) => p.id_commodity === cid && p.price_sell > 0 && p.id_terminal !== buyRow?.id_terminal)
-    .map((p) => {
-      const t = terminalsById.get(p.id_terminal);
-      const scu = tradeableScu({ cargo, budget, buyPrice: price, buyStock: buyRow?.scu_buy, sellDemand: p.scu_sell });
-      const margin = p.price_sell - price;
-      return { p, t, scu, margin, profit: margin * scu, roi: price > 0 ? (margin / price) * 100 : null };
+  const goods = rows
+    .filter((p) => p.price_buy > 0)
+    .map((g) => {
+      const dests = (sellByCommodity.get(g.id_commodity) || []).filter((s) =>
+        s.id_terminal !== tid && (cross || terminalsById.get(s.id_terminal)?.star_system_name === here?.star_system_name));
+      const best = dests[0];
+      const margin = best ? best.price_sell - g.price_buy : null;
+      const scu = best ? tradeableScu({ cargo, budget, buyPrice: g.price_buy, buyStock: g.scu_buy, sellDemand: best.scu_sell }) : 0;
+      return { g, c: commoditiesById.get(g.id_commodity), dests, best, margin, scu, profit: margin != null ? margin * scu : null };
     })
-    .filter((r) => cross || !from || r.t?.star_system_name === from.star_system_name)
-    .sort((a, b) => (sortBy === 'profit' ? b.profit - a.profit : b.p.price_sell - a.p.price_sell));
+    .sort((a, b) => {
+      const ka = sortBy === 'profit' ? a.profit : a.margin;
+      const kb = sortBy === 'profit' ? b.profit : b.margin;
+      return (kb ?? -Infinity) - (ka ?? -Infinity);
+    });
 
-  const best = sells[0];
-  const comm = commoditiesById.get(cid);
-  const warnings = [];
-  if (comm?.is_illegal) warnings.push('<span class="badge bad">Illegal — cargo scans</span>');
-  if (comm?.is_volatile_qt) warnings.push('<span class="badge warn">Volatile in quantum</span>');
-  if (comm?.is_volatile_time) warnings.push('<span class="badge warn">Decays over time</span>');
-  if (comm?.is_explosive) warnings.push('<span class="badge warn">Explosive</span>');
+  // Summary
+  const features = [];
+  if (here?.has_loading_dock) features.push('Loading dock');
+  if (here?.has_freight_elevator) features.push('Freight elevator');
+  if (here?.is_auto_load) features.push('Auto-load');
+  if (here?.is_refuel) features.push('Refuel');
+  if (here?.is_repair) features.push('Repair');
+  if (here?.is_nqa) features.push('<span class="bad">No questions asked</span>');
+  const top = goods
+    .filter((x) => x.margin > 0 && x.scu > 0 && !outOfStock(x.g))
+    .reduce((a, b) => (!a || b.profit > a.profit ? b : a), null);
+  $('s-summary').innerHTML = !here ? '' : `
+    <div class="card"><div class="label">You are at</div><div class="value">${esc(terminalName(here))}</div><div class="sub">${esc(terminalPlace(here))}${here.faction_name ? ' · ' + esc(here.faction_name) : ''}</div></div>
+    <div class="card"><div class="label">Shop</div><div class="value">${goods.length} goods for sale</div><div class="sub">Max box ${here.max_container_size ? here.max_container_size + ' SCU' : '—'}${features.length ? ' · ' + features.join(' · ') : ''}</div></div>
+    ${top ? `<div class="card highlight"><div class="label">Best buy here for ${fmt(top.scu)} SCU</div><div class="value">${esc(top.c?.name || top.g.commodity_name)} → ${esc(terminalName(terminalsById.get(top.best.id_terminal)) || top.best.terminal_name)}</div><div class="sub"><span class="good">+${fmt(top.margin)} / SCU · ${fmt(top.profit)} aUEC profit</span> for ${fmt(top.g.price_buy * top.scu)} invested</div></div>` : ''}`;
 
-  $('r-summary').innerHTML = !best ? '' : `
-    <div class="card"><div class="label">Best sell location</div><div class="value">${esc(terminalName(best.t) || best.p.terminal_name)}</div><div class="sub">${esc(terminalPlace(best.t))}</div></div>
-    <div class="card"><div class="label">Max sell price / SCU</div><div class="value good">${fmt(best.p.price_sell)} aUEC</div><div class="sub">margin ${best.margin >= 0 ? '+' : ''}${fmt(best.margin)} / SCU</div></div>
-    <div class="card"><div class="label">Est. profit (${fmt(best.scu)} SCU)</div><div class="value ${best.profit >= 0 ? 'good' : 'bad'}">${fmt(best.profit)} aUEC</div><div class="sub">invest ${fmt(price * best.scu)} aUEC</div></div>
-    ${buyRow ? `<div class="card"><div class="label">Stock at ${esc(terminalName(from))}</div><div class="value">${fmt(buyRow.scu_buy)} SCU</div><div class="sub">${statusPill(buyRow.status_buy)} reported ${ago(buyRow.date_modified)}</div></div>` : ''}
-    ${warnings.length ? `<div class="card"><div class="label">Cargo warnings</div><div style="margin-top:6px">${warnings.join('')}</div></div>` : ''}`;
-
-  if (!sells.length) {
-    $('r-table').innerHTML = '<tr><td class="empty">No known place buys this commodity with these filters.</td></tr>';
-    return;
+  // Goods for sale here
+  if (!goods.length) {
+    $('s-table').innerHTML = '<tr><td class="empty">This shop has no goods for sale.</td></tr>';
+  } else {
+    const COLS = 11;
+    $('s-table').innerHTML = `
+      <thead><tr>
+        <th>Commodity</th><th class="num">Buy price / SCU</th><th class="num">In stock (SCU)</th><th>Stock level</th><th>24 h stock</th>
+        <th>Best place to sell</th><th class="num">Sell price / SCU</th><th class="num">Profit / SCU</th>
+        <th class="num">You can carry</th><th class="num">Est. profit</th><th>Reported</th>
+      </tr></thead>
+      <tbody>${goods.map((x) => {
+        const open = openSellRow === x.g.id_commodity;
+        const empty = outOfStock(x.g);
+        return `
+        <tr class="clickable${open ? ' selected' : ''}${empty ? ' dim' : ''}" data-commodity="${x.g.id_commodity}">
+          <td><div class="loc">${open ? '▾' : '▸'} ${esc(x.c?.name || x.g.commodity_name)}</div><div class="sub">${cargoWarnings(x.c)}</div></td>
+          <td class="num">${fmt(x.g.price_buy)}${delta(x.g.price_buy, x.g.prev?.price_buy)}</td>
+          <td class="num">${fmt(x.g.scu_buy)}${delta(x.g.scu_buy, x.g.prev?.scu_buy)}</td>
+          <td>${statusPill(x.g.status_buy)}</td>
+          <td>${sparkline(tid, x.g.id_commodity, 'scu_buy')}</td>
+          <td>${x.best ? locCell(x.best) : '<span class="muted">nowhere known</span>'}</td>
+          <td class="num">${x.best ? fmt(x.best.price_sell) : '—'}</td>
+          <td class="num ${x.margin > 0 ? 'good' : 'bad'}">${x.margin == null ? '—' : (x.margin > 0 ? '+' : '') + fmt(x.margin)}</td>
+          <td class="num">${x.best ? fmt(x.scu) : '—'}</td>
+          <td class="num ${x.profit > 0 ? 'good' : 'bad'}">${x.profit == null ? '—' : fmt(x.profit)}</td>
+          <td class="${ageClass(x.g.date_modified)}">${ago(x.g.date_modified)}</td>
+        </tr>
+        ${open ? `<tr class="detail"><td colspan="${COLS}">${sellDetail(x, cargo, budget)}</td></tr>` : ''}`;
+      }).join('')}
+      </tbody>`;
   }
 
-  $('r-table').innerHTML = `
+  // What this shop buys
+  const buys = rows.filter((p) => p.price_sell > 0).sort((a, b) => a.commodity_name.localeCompare(b.commodity_name));
+  $('s-buys-wrap').querySelector('summary').textContent = `What this shop buys from you (${buys.length})`;
+  $('s-buys').innerHTML = !buys.length ? '<tr><td class="empty">This shop buys nothing.</td></tr>' : `
     <thead><tr>
-      <th>#</th><th>Sell at</th><th class="num">Sell price / SCU</th><th class="num">Margin / SCU</th><th class="num">ROI</th>
-      <th class="num">Demand (SCU)</th><th title="How full their storage is. Empty = they pay full price.">Their storage</th><th class="num">You can sell</th><th class="num">Est. profit</th><th>Max box</th><th>Reported</th>
+      <th>Commodity</th><th class="num">Pays / SCU</th><th class="num">Their storage (SCU)</th><th>Storage level</th><th>24 h storage</th><th class="num">Will buy (SCU)</th><th>Reported</th>
     </tr></thead>
-    <tbody>${sells.map((r, i) => `
-      <tr class="${i === 0 ? 'top' : ''}">
-        <td class="muted">${i + 1}</td>
-        <td><div class="loc">${esc(terminalName(r.t) || r.p.terminal_name)}</div><div class="sub">${esc(terminalPlace(r.t))}</div></td>
-        <td class="num">${fmt(r.p.price_sell)}</td>
-        <td class="num ${r.margin >= 0 ? 'good' : 'bad'}">${r.margin >= 0 ? '+' : ''}${fmt(r.margin)}</td>
-        <td class="num">${r.roi == null ? '—' : r.roi.toFixed(1) + '%'}</td>
-        <td class="num">${r.p.scu_sell > 0 ? fmt(r.p.scu_sell) : '<span class="muted">unknown</span>'}</td>
-        <td>${statusPill(r.p.status_sell, true)}</td>
-        <td class="num">${fmt(r.scu)}</td>
-        <td class="num ${r.profit >= 0 ? 'good' : 'bad'}">${fmt(r.profit)}</td>
-        <td>${r.t?.max_container_size ? r.t.max_container_size + ' SCU' : '—'}</td>
-        <td class="${ageClass(r.p.date_modified)}">${ago(r.p.date_modified)}</td>
+    <tbody>${buys.map((p) => `
+      <tr>
+        <td class="loc">${esc(p.commodity_name)}</td>
+        <td class="num">${fmt(p.price_sell)}${delta(p.price_sell, p.prev?.price_sell)}</td>
+        <td class="num">${fmt(p.scu_sell_stock)}${delta(p.scu_sell_stock, p.prev?.scu_sell_stock)}</td>
+        <td>${statusPill(p.status_sell, true)}</td>
+        <td>${sparkline(tid, p.id_commodity, 'scu_sell_stock')}</td>
+        <td class="num">${p.scu_sell > 0 ? fmt(p.scu_sell) : '<span class="muted">unknown</span>'}</td>
+        <td class="${ageClass(p.date_modified)}">${ago(p.date_modified)}</td>
       </tr>`).join('')}
     </tbody>`;
 }
 
-// ---------- Best routes ----------
+// Every place that buys one commodity, shown when a Sell Finder row is expanded.
+function sellDetail(x, cargo, budget) {
+  if (!x.dests.length) return '<div class="empty">No known shop buys this commodity.</div>';
+  return `
+    <table class="inner">
+      <thead><tr>
+        <th>#</th><th>Sell at</th><th class="num">Sell price / SCU</th><th class="num">Profit / SCU</th><th class="num">ROI</th>
+        <th class="num">Will buy (SCU)</th><th>Their storage</th><th>24 h storage</th><th class="num">Est. profit</th><th>Max box</th><th>Reported</th>
+      </tr></thead>
+      <tbody>${x.dests.map((s, i) => {
+        const t = terminalsById.get(s.id_terminal);
+        const margin = s.price_sell - x.g.price_buy;
+        const scu = tradeableScu({ cargo, budget, buyPrice: x.g.price_buy, buyStock: x.g.scu_buy, sellDemand: s.scu_sell });
+        return `
+        <tr>
+          <td class="muted">${i + 1}</td>
+          <td>${locCell(s)}</td>
+          <td class="num">${fmt(s.price_sell)}${delta(s.price_sell, s.prev?.price_sell)}</td>
+          <td class="num ${margin > 0 ? 'good' : 'bad'}">${margin > 0 ? '+' : ''}${fmt(margin)}</td>
+          <td class="num">${x.g.price_buy > 0 ? ((margin / x.g.price_buy) * 100).toFixed(1) + '%' : '—'}</td>
+          <td class="num">${s.scu_sell > 0 ? fmt(s.scu_sell) : '<span class="muted">unknown</span>'}</td>
+          <td>${statusPill(s.status_sell, true)}</td>
+          <td>${sparkline(s.id_terminal, s.id_commodity, 'scu_sell_stock')}</td>
+          <td class="num ${margin > 0 ? 'good' : 'bad'}">${fmt(margin * scu)}</td>
+          <td>${t?.max_container_size ? t.max_container_size + ' SCU' : '—'}</td>
+          <td class="${ageClass(s.date_modified)}">${ago(s.date_modified)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
 
-function renderBest() {
-  const cargo = num($('b-cargo')) || 0;
-  const budget = num($('b-budget'));
-  const system = $('b-system').value;
-  const fromId = Number($('b-from').value) || null;
-  const sameSystem = $('b-same').checked;
-  const illegal = $('b-illegal').checked;
+// ---------- Best Routes (investment planner) ----------
 
-  const byCommodity = new Map();
-  for (const p of data.prices) {
-    if (!byCommodity.has(p.id_commodity)) byCommodity.set(p.id_commodity, { buys: [], sells: [] });
-    const g = byCommodity.get(p.id_commodity);
-    if (p.price_buy > 0) g.buys.push(p);
-    if (p.price_sell > 0) g.sells.push(p);
-  }
+// Fill one cargo hold for a buy → sell pair. Greedy by profit per SCU (best when cargo is the limit)
+// and by return on investment (best when money is the limit); keep whichever earns more.
+function fillHold(items, cargo, budget, mix) {
+  const run = (order) => {
+    let space = cargo, money = budget > 0 ? budget : Infinity;
+    const lines = [];
+    for (const it of order) {
+      let scu = Math.min(space, Math.floor(money / it.b.price_buy));
+      if (it.b.scu_buy > 0) scu = Math.min(scu, it.b.scu_buy);
+      if (it.s.scu_sell > 0) scu = Math.min(scu, it.s.scu_sell);
+      if (scu <= 0) continue;
+      lines.push({ ...it, scu });
+      space -= scu;
+      money -= scu * it.b.price_buy;
+      if (!mix || space <= 0) break;
+    }
+    const profit = lines.reduce((s, l) => s + l.margin * l.scu, 0);
+    const cost = lines.reduce((s, l) => s + l.b.price_buy * l.scu, 0);
+    return { lines, profit, cost, scu: cargo - space };
+  };
+  const byMargin = run([...items].sort((a, b) => b.margin - a.margin));
+  const byRoi = run([...items].sort((a, b) => b.margin / b.b.price_buy - a.margin / a.b.price_buy));
+  return byRoi.profit > byMargin.profit ? byRoi : byMargin;
+}
 
+function planRoutes() {
+  const budget = num($('p-budget'));
+  const cargo = num($('p-cargo')) || 0;
+  const fromId = Number($('p-from').value) || null;
+  const system = $('p-system').value;
+  const sameSystem = $('p-same').checked;
+  const mix = $('p-mix').checked;
+  const illegal = $('p-illegal').checked;
+  const maxAgeHours = Number($('p-age').value) || null;
+  const minDate = maxAgeHours ? Date.now() / 1000 - maxAgeHours * 3600 : 0;
   const inSystem = (t) => !system || t?.star_system_name === system;
-  const routes = [];
-  for (const [cid, g] of byCommodity) {
-    const c = commoditiesById.get(cid);
+
+  // Group every profitable (buy row, sell row) by the pair of shops.
+  const pairs = new Map();
+  for (const b of data.prices) {
+    if (!(b.price_buy > 0) || outOfStock(b) || b.date_modified < minDate) continue;
+    if (fromId && b.id_terminal !== fromId) continue;
+    const c = commoditiesById.get(b.id_commodity);
     if (!c || (c.is_illegal && !illegal)) continue;
-    for (const b of g.buys) {
-      if (fromId && b.id_terminal !== fromId) continue;
-      const bt = terminalsById.get(b.id_terminal);
-      if (!inSystem(bt)) continue;
-      for (const s of g.sells) {
-        if (s.price_sell <= b.price_buy || s.id_terminal === b.id_terminal) continue;
-        const st = terminalsById.get(s.id_terminal);
-        if (!inSystem(st)) continue;
-        if (sameSystem && bt?.star_system_name !== st?.star_system_name) continue;
-        const scu = tradeableScu({ cargo, budget, buyPrice: b.price_buy, buyStock: b.scu_buy, sellDemand: s.scu_sell });
-        if (scu <= 0) continue;
-        const margin = s.price_sell - b.price_buy;
-        routes.push({ c, b, s, bt, st, scu, margin, profit: margin * scu });
-      }
+    const bt = terminalsById.get(b.id_terminal);
+    if (!inSystem(bt)) continue;
+    for (const s of sellByCommodity.get(b.id_commodity) || []) {
+      if (s.price_sell <= b.price_buy) break; // sorted by price, nothing further is profitable
+      if (s.id_terminal === b.id_terminal || s.date_modified < minDate) continue;
+      const st = terminalsById.get(s.id_terminal);
+      if (!inSystem(st) || (sameSystem && bt?.star_system_name !== st?.star_system_name)) continue;
+      const key = `${b.id_terminal}>${s.id_terminal}`;
+      if (!pairs.has(key)) pairs.set(key, { key, bt, st, buyId: b.id_terminal, sellId: s.id_terminal, items: [] });
+      pairs.get(key).items.push({ c, b, s, margin: s.price_sell - b.price_buy });
     }
   }
-  routes.sort((x, y) => y.profit - x.profit);
-  const top = routes.slice(0, 100);
 
-  if (!top.length) {
-    $('b-table').innerHTML = '<tr><td class="empty">No profitable routes with these filters.</td></tr>';
+  const plans = [];
+  for (const pair of pairs.values()) {
+    const fill = fillHold(pair.items, cargo, budget, mix);
+    if (fill.profit > 0) plans.push({ ...pair, ...fill });
+  }
+  plans.sort((a, b) => b.profit - a.profit);
+  return { plans, budget, cargo };
+}
+
+function routeName(row, t) {
+  return esc(t ? terminalName(t) : row.terminal_name);
+}
+
+function planLines(plan) {
+  return `
+    <table class="inner">
+      <thead><tr>
+        <th>Buy</th><th class="num">SCU</th><th class="num">Buy / SCU</th><th class="num">Cost</th>
+        <th class="num">Stock at ${routeName(plan.lines[0].b, plan.bt)}</th><th>Stock level</th><th>24 h stock</th>
+        <th class="num">Sell / SCU</th><th class="num">They'll buy</th><th>Their storage</th><th class="num">Profit</th><th>Reported</th>
+      </tr></thead>
+      <tbody>${plan.lines.map((l) => {
+        const oldest = Math.min(l.b.date_modified, l.s.date_modified);
+        return `
+        <tr>
+          <td><div class="loc">${esc(l.c.name)}</div><div class="sub">${cargoWarnings(l.c)}</div></td>
+          <td class="num"><b>${fmt(l.scu)}</b></td>
+          <td class="num">${fmt(l.b.price_buy)}${delta(l.b.price_buy, l.b.prev?.price_buy)}</td>
+          <td class="num">${fmt(l.b.price_buy * l.scu)}</td>
+          <td class="num">${fmt(l.b.scu_buy)}${delta(l.b.scu_buy, l.b.prev?.scu_buy)}</td>
+          <td>${statusPill(l.b.status_buy)}</td>
+          <td>${sparkline(l.b.id_terminal, l.b.id_commodity, 'scu_buy')}</td>
+          <td class="num">${fmt(l.s.price_sell)}${delta(l.s.price_sell, l.s.prev?.price_sell)}</td>
+          <td class="num">${l.s.scu_sell > 0 ? fmt(l.s.scu_sell) : '<span class="muted">unknown</span>'}</td>
+          <td>${statusPill(l.s.status_sell, true)}</td>
+          <td class="num good">${fmt(l.margin * l.scu)}</td>
+          <td class="${ageClass(oldest)}">${ago(oldest)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+}
+
+function renderRoutes() {
+  const { plans, budget, cargo } = planRoutes();
+  const best = plans[0];
+
+  if (!best) {
+    $('p-plan').innerHTML = '<div class="card empty">No profitable route with this investment and these filters. Try a bigger budget, more cargo space or fewer filters.</div>';
+    $('p-table').innerHTML = '';
     return;
   }
 
-  $('b-table').innerHTML = `
+  const roi = (p) => (p.cost > 0 ? ((p.profit / p.cost) * 100).toFixed(1) + '%' : '—');
+  const boxNote = best.st?.max_container_size ? ` · max box ${best.st.max_container_size} SCU` : '';
+  $('p-plan').innerHTML = `
+    <div class="plan">
+      <div class="plan-head">
+        <div>
+          <div class="label">Recommended for ${budget ? fmt(budget) + ' aUEC' : 'any budget'} and ${fmt(cargo)} SCU</div>
+          <div class="route">
+            <span>${routeName(best.lines[0].b, best.bt)}<small>${esc(terminalPlace(best.bt))}</small></span>
+            <span class="arrow">→</span>
+            <span>${routeName(best.lines[0].s, best.st)}<small>${esc(terminalPlace(best.st))}${boxNote}</small></span>
+          </div>
+        </div>
+        <div class="plan-stats">
+          <div><div class="label">Invest</div><div class="value">${fmt(best.cost)}</div></div>
+          <div><div class="label">Profit</div><div class="value good">+${fmt(best.profit)}</div></div>
+          <div><div class="label">Return</div><div class="value">${roi(best)}</div></div>
+          <div><div class="label">Cargo used</div><div class="value">${fmt(best.scu)} / ${fmt(cargo)}</div></div>
+        </div>
+      </div>
+      ${planLines(best)}
+    </div>`;
+
+  const others = plans.slice(1, 51);
+  const COLS = 9;
+  $('p-table').innerHTML = `
     <thead><tr>
-      <th>#</th><th>Commodity</th><th>Buy at</th><th class="num">Buy / SCU</th><th>Sell at</th><th class="num">Sell / SCU</th>
-      <th class="num">Margin / SCU</th><th class="num">SCU</th><th class="num">Investment</th><th class="num">Est. profit</th><th>Oldest report</th>
+      <th>#</th><th>Buy at</th><th>Sell at</th><th>What to buy</th><th class="num">Invest</th><th class="num">Profit</th>
+      <th class="num">Return</th><th class="num">Cargo used</th><th>Oldest report</th>
     </tr></thead>
-    <tbody>${top.map((r, i) => {
-      const oldest = Math.min(r.b.date_modified, r.s.date_modified);
+    <tbody>${others.map((p, i) => {
+      const open = openRoute === p.key;
+      const oldest = Math.min(...p.lines.flatMap((l) => [l.b.date_modified, l.s.date_modified]));
       return `
-      <tr class="${i === 0 ? 'top' : ''}">
-        <td class="muted">${i + 1}</td>
-        <td><div class="loc">${esc(r.c.name)}</div><div class="sub">${esc(r.c.kind || '')}${r.c.is_illegal ? ' · <span class="bad">illegal</span>' : ''}</div></td>
-        <td><div class="loc">${esc(terminalName(r.bt) || r.b.terminal_name)}</div><div class="sub">${esc(terminalPlace(r.bt))}</div></td>
-        <td class="num">${fmt(r.b.price_buy)}</td>
-        <td><div class="loc">${esc(terminalName(r.st) || r.s.terminal_name)}</div><div class="sub">${esc(terminalPlace(r.st))}</div></td>
-        <td class="num">${fmt(r.s.price_sell)}</td>
-        <td class="num good">+${fmt(r.margin)}</td>
-        <td class="num">${fmt(r.scu)}</td>
-        <td class="num">${fmt(r.b.price_buy * r.scu)}</td>
-        <td class="num good">${fmt(r.profit)}</td>
+      <tr class="clickable${open ? ' selected' : ''}" data-route="${p.key}">
+        <td class="muted">${open ? '▾' : '▸'} ${i + 2}</td>
+        <td>${locCell(p.lines[0].b)}</td>
+        <td>${locCell(p.lines[0].s)}</td>
+        <td>${p.lines.map((l) => `${fmt(l.scu)} SCU ${esc(l.c.name)}`).join('<br>')}</td>
+        <td class="num">${fmt(p.cost)}</td>
+        <td class="num good">+${fmt(p.profit)}</td>
+        <td class="num">${roi(p)}</td>
+        <td class="num">${fmt(p.scu)}</td>
         <td class="${ageClass(oldest)}">${ago(oldest)}</td>
-      </tr>`;
+      </tr>
+      ${open ? `<tr class="detail"><td colspan="${COLS}">${planLines(p)}</td></tr>` : ''}`;
     }).join('')}
     </tbody>`;
-}
-
-// ---------- Shop inventory ----------
-
-function renderInventory() {
-  const tid = Number($('i-terminal').value);
-  const t = terminalsById.get(tid);
-  const filter = $('i-filter').value.trim().toLowerCase();
-  const rows = data.prices
-    .filter((p) => p.id_terminal === tid && (!filter || p.commodity_name.toLowerCase().includes(filter)))
-    .sort((a, b) => a.commodity_name.localeCompare(b.commodity_name));
-
-  const features = [];
-  if (t?.has_loading_dock) features.push('Loading dock');
-  if (t?.has_freight_elevator) features.push('Freight elevator');
-  if (t?.has_docking_port) features.push('Docking port');
-  if (t?.is_auto_load) features.push('Auto-load');
-  if (t?.is_refuel) features.push('Refuel');
-  if (t?.is_repair) features.push('Repair');
-  if (t?.is_nqa) features.push('<span class="bad">No-questions-asked (accepts illegal)</span>');
-
-  const selling = rows.filter((p) => p.price_buy > 0);
-  const totalStock = selling.reduce((s, p) => s + (p.scu_buy || 0), 0);
-  $('i-info').innerHTML = !t ? '' : `
-    <div class="card"><div class="label">Location</div><div class="value">${esc(terminalName(t))}</div><div class="sub">${esc(terminalPlace(t))}${t.faction_name ? ' · ' + esc(t.faction_name) : ''}</div></div>
-    <div class="card"><div class="label">Goods for sale</div><div class="value">${selling.length}</div><div class="sub">${fmt(totalStock)} SCU in storage</div></div>
-    <div class="card"><div class="label">Max container</div><div class="value">${t.max_container_size ? t.max_container_size + ' SCU' : '—'}</div><div class="sub">${features.join(' · ') || '&nbsp;'}</div></div>`;
-
-  if (!rows.length) {
-    $('i-table').innerHTML = '<tr><td class="empty">No commodity data for this shop.</td></tr>';
-    $('i-history').innerHTML = '';
-    return;
-  }
-
-  $('i-table').innerHTML = `
-    <thead><tr>
-      <th>Commodity</th>
-      <th class="num">Shop sells at</th><th class="num">In stock (SCU)</th><th>Stock level</th>
-      <th class="num">Shop buys at</th><th class="num">Shop inventory (SCU)</th><th class="num">Will buy (SCU)</th><th>Storage level</th>
-      <th>Reported</th>
-    </tr></thead>
-    <tbody>${rows.map((p) => {
-      const sel = selectedHistory && selectedHistory.terminal === tid && selectedHistory.commodity === p.id_commodity;
-      return `
-      <tr class="clickable${sel ? ' selected' : ''}" data-commodity="${p.id_commodity}">
-        <td class="loc">${esc(p.commodity_name)}</td>
-        <td class="num">${p.price_buy > 0 ? fmt(p.price_buy) + delta(p.price_buy, p.prev?.price_buy) : '<span class="muted">—</span>'}</td>
-        <td class="num">${p.price_buy > 0 ? fmt(p.scu_buy) + delta(p.scu_buy, p.prev?.scu_buy) : '<span class="muted">—</span>'}</td>
-        <td>${p.price_buy > 0 ? statusPill(p.status_buy) : ''}</td>
-        <td class="num">${p.price_sell > 0 ? fmt(p.price_sell) + delta(p.price_sell, p.prev?.price_sell) : '<span class="muted">—</span>'}</td>
-        <td class="num">${p.price_sell > 0 ? fmt(p.scu_sell_stock) + delta(p.scu_sell_stock, p.prev?.scu_sell_stock) : '<span class="muted">—</span>'}</td>
-        <td class="num">${p.price_sell > 0 ? (p.scu_sell > 0 ? fmt(p.scu_sell) : '<span class="muted">unknown</span>') : '<span class="muted">—</span>'}</td>
-        <td>${p.price_sell > 0 ? statusPill(p.status_sell, true) : ''}</td>
-        <td class="${ageClass(p.date_modified)}">${ago(p.date_modified)}</td>
-      </tr>`;
-    }).join('')}
-    </tbody>`;
-
-  if (selectedHistory?.terminal === tid) renderHistory();
-  else $('i-history').innerHTML = '';
-}
-
-function renderHistory() {
-  const { terminal, commodity } = selectedHistory;
-  const series = historyFor(terminal, commodity);
-  const name = commoditiesById.get(commodity)?.name || '';
-  const box = $('i-history');
-  if (series.length < 2) {
-    box.innerHTML = `<p class="hint">${esc(name)}: stock history builds up while this page is open (one point every 15 minutes, kept for 24 h in this browser). ${series.length} point so far.</p>`;
-    return;
-  }
-
-  const isSellShop = series.some((s) => s.price_buy > 0);
-  const key = isSellShop ? 'scu_buy' : 'scu_sell_stock';
-  const W = 720, H = 180, P = 32;
-  const vals = series.map((s) => s[key] || 0);
-  const max = Math.max(...vals, 1);
-  const t0 = series[0].t, t1 = series[series.length - 1].t;
-  const x = (t) => P + ((t - t0) / Math.max(1, t1 - t0)) * (W - 2 * P);
-  const y = (v) => H - P - (v / max) * (H - 2 * P);
-  const pts = series.map((s) => `${x(s.t).toFixed(1)},${y(s[key] || 0).toFixed(1)}`).join(' ');
-
-  box.innerHTML = `
-    <p class="hint">${esc(name)} — ${isSellShop ? 'stock available to buy' : 'shop inventory'} over the last ${series.length} refreshes</p>
-    <svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px">
-      <line x1="${P}" y1="${H - P}" x2="${W - P}" y2="${H - P}" stroke="#24323f"/>
-      <text x="${P - 4}" y="${P}" fill="#7f93a5" font-size="11" text-anchor="end">${fmt(max)}</text>
-      <text x="${P - 4}" y="${H - P}" fill="#7f93a5" font-size="11" text-anchor="end">0</text>
-      <text x="${P}" y="${H - 10}" fill="#7f93a5" font-size="11">${new Date(t0).toLocaleTimeString()}</text>
-      <text x="${W - P}" y="${H - 10}" fill="#7f93a5" font-size="11" text-anchor="end">${new Date(t1).toLocaleTimeString()}</text>
-      <polyline points="${pts}" fill="none" stroke="#3fc1ff" stroke-width="2"/>
-      ${series.map((s) => `<circle cx="${x(s.t).toFixed(1)}" cy="${y(s[key] || 0).toFixed(1)}" r="3" fill="#3fc1ff"><title>${new Date(s.t).toLocaleString()}: ${fmt(s[key])} SCU</title></circle>`).join('')}
-    </svg>`;
 }
 
 // ---------- Commodity guide ----------
@@ -556,11 +634,7 @@ function renderCommodities() {
     .filter((c) => !filter || `${c.name} ${c.code} ${c.kind}`.toLowerCase().includes(filter))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const tags = (c) => [
-    c.is_illegal && '<span class="badge bad">Illegal</span>',
-    c.is_volatile_qt && '<span class="badge warn">QT volatile</span>',
-    c.is_volatile_time && '<span class="badge warn">Perishable</span>',
-    c.is_explosive && '<span class="badge warn">Explosive</span>',
+  const tags = (c) => cargoWarnings(c) + [
     c.is_raw && '<span class="badge">Raw ore</span>',
     c.is_refinable && '<span class="badge">Refinable</span>',
     c.is_refined && '<span class="badge">Refined</span>',
@@ -598,9 +672,8 @@ function renderCommodities() {
 // ---------- wiring ----------
 
 function renderAll() {
-  renderRoute();
-  renderBest();
-  renderInventory();
+  renderSell();
+  renderRoutes();
   renderCommodities();
 }
 
@@ -613,22 +686,27 @@ document.querySelectorAll('nav .tab').forEach((btn) =>
 
 const on = (ids, evt, fn) => ids.forEach((id) => $(id).addEventListener(evt, () => { if (data) { fn(); savePrefs(); } }));
 
-on(['r-commodity'], 'change', () => { updateRouteTerminals(); fillRoutePrice(); renderRoute(); });
-on(['r-terminal'], 'change', () => { fillRoutePrice(); renderRoute(); });
-on(['r-price', 'r-cargo', 'r-budget'], 'input', renderRoute);
-on(['r-sort', 'r-cross'], 'change', renderRoute);
-on(['b-cargo', 'b-budget'], 'input', renderBest);
-on(['b-system', 'b-from', 'b-same', 'b-illegal'], 'change', renderBest);
-on(['i-terminal'], 'change', () => { selectedHistory = null; renderInventory(); });
-on(['i-filter'], 'input', renderInventory);
+on(['s-location'], 'change', () => { openSellRow = null; renderSell(); });
+on(['s-cargo', 's-budget'], 'input', renderSell);
+on(['s-sort', 's-cross'], 'change', renderSell);
+on(['p-budget', 'p-cargo'], 'input', () => { openRoute = null; renderRoutes(); });
+on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal'], 'change', () => { openRoute = null; renderRoutes(); });
 on(['c-filter'], 'input', renderCommodities);
 on(['c-kind'], 'change', renderCommodities);
 
-$('i-table').addEventListener('click', (e) => {
+$('s-table').addEventListener('click', (e) => {
   const tr = e.target.closest('tr[data-commodity]');
   if (!tr) return;
-  selectedHistory = { terminal: Number($('i-terminal').value), commodity: Number(tr.dataset.commodity) };
-  renderInventory();
+  const id = Number(tr.dataset.commodity);
+  openSellRow = openSellRow === id ? null : id;
+  renderSell();
+});
+
+$('p-table').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-route]');
+  if (!tr) return;
+  openRoute = openRoute === tr.dataset.route ? null : tr.dataset.route;
+  renderRoutes();
 });
 
 $('refresh-btn').addEventListener('click', async () => {

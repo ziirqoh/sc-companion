@@ -6,9 +6,8 @@ A free Star Citizen trading website. It's three static files (`index.html`, `sty
 
 | Tab | What it does |
 |---|---|
-| **Sell Finder** | Choose a commodity, where you buy it, and the price you paid. It lists every place that buys it back, ranked by sell price or total profit, with margin, ROI, demand, storage level and max container size. |
-| **Best Routes** | Shows the 100 most profitable buy → sell routes for your cargo SCU and budget. You can filter by system or starting location and include or exclude illegal goods. |
-| **Shop Inventory** | Shows what a commodity shop has in storage: stock, prices, and ▲▼ changes since the last refresh. Click a row to see its stock history. |
+| **Sell Finder** | Choose your location. It lists every item the shop sells, with its price, current stock (▲▼ changes, 24 h chart) and the best place to sell it, plus your profit for your cargo and budget. Click an item to see every place that buys it. A section below shows what the shop buys from you. |
+| **Best Routes** | Enter your investment and cargo space. It recommends what to buy, how many SCU, where to buy it and where to sell it, and can mix several goods on one route to fill your hold. Each route shows stock at the buy shop and demand at the sell shop. You can filter by start location, system, data age and illegal goods. |
 | **Commodity Guide** | Lists every commodity with its kind, risks (illegal, QT-volatile, perishable, explosive), cheapest buy, best sell and a wiki link. |
 
 ## How the data works

@@ -131,3 +131,32 @@ a { color: var(--accent); }
   header, main, nav, footer { padding-left: 16px; padding-right: 16px; }
   .form label, .form label.wide { min-width: 100%; }
 }
+
+h2 { font-size: 15px; margin: 18px 0 10px; color: var(--text); }
+
+.card.highlight { border-color: var(--good); }
+
+tr.dim td { opacity: .45; }
+tr.detail > td { background: var(--bg); padding: 10px 12px 14px 28px; white-space: normal; }
+table.inner { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; }
+table.inner th { position: static; }
+.spark { display: block; }
+
+details.more { margin-top: 18px; }
+details.more summary { cursor: pointer; color: var(--accent); margin-bottom: 10px; font-weight: 600; }
+
+.plan {
+  background: var(--panel);
+  border: 1px solid var(--good);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  overflow-x: auto;
+}
+.plan-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; }
+.plan .label { color: var(--muted); font-size: 12px; }
+.plan .value { font-size: 20px; font-weight: 600; }
+.route { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 4px; font-size: 20px; font-weight: 600; }
+.route small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
+.route .arrow { color: var(--good); }
+.plan-stats { display: flex; gap: 22px; flex-wrap: wrap; }
