@@ -21,7 +21,26 @@ let openRoute = null;       // route key expanded inside that commodity
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const fmt = (n) => (n == null || isNaN(n) ? '—' : Math.round(n).toLocaleString('en-US'));
-const num = (el) => (el.value === '' ? null : Number(el.value));
+// Reads a number input, ignoring the thousands separators shown in money fields.
+const num = (el) => {
+  const digits = el.value.replace(/[^\d]/g, '');
+  return digits === '' ? null : Number(digits);
+};
+
+// Money fields show "1,250,000" while you type. The caret stays after the same digit.
+function formatMoneyInput(el) {
+  const digitsBeforeCaret = el.value.slice(0, el.selectionStart ?? el.value.length).replace(/[^\d]/g, '').length;
+  const digits = el.value.replace(/[^\d]/g, '').replace(/^0+(?=\d)/, '');
+  el.value = digits ? Number(digits).toLocaleString('en-US') : '';
+  let pos = 0;
+  for (let seen = 0; pos < el.value.length && seen < digitsBeforeCaret; pos++) if (/\d/.test(el.value[pos])) seen++;
+  if (document.activeElement === el) el.setSelectionRange(pos, pos);
+}
+
+document.querySelectorAll('input.money').forEach((el) => {
+  el.addEventListener('input', () => formatMoneyInput(el));
+  formatMoneyInput(el);
+});
 
 function ago(unixSeconds) {
   if (!unixSeconds) return '—';
@@ -318,6 +337,7 @@ function initSelectors() {
       if (typeof v === 'boolean') el.checked = v;
       else if (el.tagName !== 'SELECT' || [...el.options].some((o) => o.value === v)) el.value = v;
     }
+    document.querySelectorAll('input.money').forEach(formatMoneyInput);
     if (!prefs['s-location']) {
       const levski = shops.find((t) => terminalName(t) === 'Levski');
       if (levski) $('s-location').value = levski.id;

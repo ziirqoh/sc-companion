@@ -88,7 +88,7 @@
           <input id="s-cargo" type="number" min="1" step="1" value="96">
         </label>
         <label>Budget (aUEC, optional)
-          <input id="s-budget" type="number" min="0" step="1000" placeholder="no limit">
+          <input id="s-budget" class="money" type="text" inputmode="numeric" autocomplete="off" placeholder="no limit">
         </label>
         <label>Sort by
           <select id="s-sort">
@@ -112,7 +112,7 @@
       <p class="hint">Enter how much you want to invest and your cargo space. You'll get the best thing to buy, where to buy it, and where to sell it. If one item can't fill your hold, the plan adds others on the same route.</p>
       <div class="form">
         <label>Investment (aUEC)
-          <input id="p-budget" type="number" min="0" step="1000" value="250000">
+          <input id="p-budget" class="money" type="text" inputmode="numeric" autocomplete="off" value="250,000">
         </label>
         <label>Cargo space (SCU)
           <input id="p-cargo" type="number" min="1" step="1" value="96">
@@ -161,6 +161,6 @@
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 
-  <script src="app.js?v=9"></script>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
