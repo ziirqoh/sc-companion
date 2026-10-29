@@ -1,8 +1,8 @@
 # SC Companion
 
-A free Star Citizen helper website. It's three static files (`index.html`, `style.css` and `app.js`) with no server and no build step.
+A free Star Citizen helper website. It is static files only (`index.html`, `style.css`, `app.js`, `salvage.js`) with no server and no build step.
 
-The front page (`#/`) shows live stats and a highlight from each tool. The tools are grouped under **Trade Companion** (`#/trade/...`).
+The front page (`#/`) shows live stats and a highlight from each tool. The tools are grouped under **Trade Companion** (`#/trade/...`) and **Salvage Companion** (`#/salvage/...`).
 
 ## Trade Companion
 
@@ -11,6 +11,14 @@ The front page (`#/`) shows live stats and a highlight from each tool. The tools
 | **Sell Finder** | Choose your location. It lists every item the shop sells, with its price, current stock (▲▼ changes, 24 h chart) and the best place to sell it, plus your profit for your cargo and budget. Click an item to see every place that buys it. A section below shows what the shop buys from you. |
 | **Best Routes** | Enter your investment and cargo space. It recommends what to buy, how many SCU, where to buy it and where to sell it, and can mix several goods on one route to fill your hold. Each route shows stock at the buy shop and demand at the sell shop. You can filter by start location, system, data age and illegal goods. |
 | **Commodity Guide** | Lists every commodity with its kind, risks (illegal, QT-volatile, perishable, explosive), cheapest buy, best sell and a wiki link. |
+
+## Salvage Companion
+
+| Tab | What it does |
+|---|---|
+| **Sell Salvage** | Enter how many SCU of RMC, Construction Materials and other salvage goods you carry. It ranks the best single place to sell all of it, compares that with selling each material at its own best price, and lists the top buyers for each material. You can fill the quantities from a salvage ship's capacity in one click. |
+| **Salvage Ships** | Every salvage ship from UEX with cargo, crew, pad size and fracture limit, what a full hold of RMC is worth now, and a step-by-step guide for each ship. It also covers salvaging on foot with the multi-tool, Cambio and MaxLift. |
+| **Salvage Guide** | How salvage works, salvaging a wreck step by step, salvage contracts and how to complete them, legality, scraper modules, refining and selling, and where to start. It's written for Alpha 4.10 from the Star Citizen wiki. |
 
 ## How the data works
 

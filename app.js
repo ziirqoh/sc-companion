@@ -939,6 +939,7 @@ function renderAll() {
   renderSell();
   renderRoutes();
   renderCommodities();
+  renderSalvage(); // salvage.js
   renderHome();
 }
 
@@ -993,13 +994,18 @@ function renderHome() {
 // ---------- navigation ----------
 // Pages live in the URL hash (#/ and #/trade/<tab>) so links, bookmarks and the back button work.
 
+// Panel ids per section: Trade uses tab-<name>, Salvage uses tab-sv-<name>.
+const SECTIONS = { trade: 'tab-', salvage: 'tab-sv-' };
+
 function route() {
+  if (location.hash.length > 1 && !location.hash.startsWith('#/')) return; // in-page anchors, not pages
   const [, page = '', tab = 'sell'] = location.hash.split('/');
-  const current = page === 'trade' ? 'trade' : 'home';
-  document.querySelectorAll('.page').forEach((el) => el.classList.toggle('active', el.id === 'page-' + current));
+  const current = SECTIONS[page] ? page : 'home';
+  const pageEl = $('page-' + current);
+  document.querySelectorAll('.page').forEach((el) => el.classList.toggle('active', el === pageEl));
   document.querySelectorAll('.main-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.page === current));
-  document.querySelectorAll('.sub-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
-  document.querySelectorAll('.panel').forEach((el) => el.classList.toggle('active', el.id === 'tab-' + tab));
+  pageEl.querySelectorAll('.sub-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
+  pageEl.querySelectorAll('.panel').forEach((el) => el.classList.toggle('active', el.id === SECTIONS[current] + tab));
   if (current === 'home' && data) renderHome(); // reflect settings changed on the other pages
   window.scrollTo(0, 0);
 }

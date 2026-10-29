@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SC Companion</title>
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
   <header>
@@ -25,6 +25,7 @@
   <nav class="main-nav">
     <a class="tab" data-page="home" href="#/">Home</a>
     <a class="tab" data-page="trade" href="#/trade/sell">Trade Companion</a>
+    <a class="tab" data-page="salvage" href="#/salvage/sell">Salvage Companion</a>
   </nav>
 
   <main>
@@ -59,6 +60,33 @@
             <h3>Commodity Guide</h3>
             <p>Every tradeable commodity with its risks, cheapest buy, best sell and max margin. Sort by any column.</p>
             <div id="home-commodities" class="feature-live"></div>
+          </a>
+        </div>
+      </section>
+
+      <section class="home-section">
+        <div class="section-head">
+          <h2>Salvage Companion</h2>
+          <a class="button" href="#/salvage/sell">Open Salvage Companion →</a>
+        </div>
+        <div class="feature-grid">
+          <a class="feature" href="#/salvage/sell">
+            <div class="feature-icon">⛁</div>
+            <h3>Sell Salvage</h3>
+            <p>Enter how much RMC and Construction Materials you carry. See where to sell them for the most aUEC, all at one stop or material by material.</p>
+            <div id="home-salvage-sell" class="feature-live"></div>
+          </a>
+          <a class="feature" href="#/salvage/ships">
+            <div class="feature-icon">✈</div>
+            <h3>Salvage Ships</h3>
+            <p>Every salvage ship, from the Salvation to the Reclaimer: capacity, crew, what it can break apart, and a step-by-step guide to using it.</p>
+            <div id="home-salvage-ships" class="feature-live"></div>
+          </a>
+          <a class="feature" href="#/salvage/guide">
+            <div class="feature-icon">✎</div>
+            <h3>Salvage Guide</h3>
+            <p>How salvage works, how to take and finish salvage contracts, what's legal, and how to turn wrecks into aUEC.</p>
+            <div class="feature-live"><span class="label">Start here if you've never salvaged.</span></div>
           </a>
         </div>
       </section>
@@ -155,6 +183,189 @@
       <div class="table-wrap"><table id="c-table"></table></div>
     </section>
     </div>
+
+    <!-- Salvage Companion -->
+    <div id="page-salvage" class="page">
+    <nav class="sub-nav">
+      <a class="tab" data-tab="sell" href="#/salvage/sell">Sell Salvage</a>
+      <a class="tab" data-tab="ships" href="#/salvage/ships">Salvage Ships</a>
+      <a class="tab" data-tab="guide" href="#/salvage/guide">Salvage Guide</a>
+    </nav>
+
+    <!-- Where to sell what you salvaged -->
+    <section id="tab-sv-sell" class="panel">
+      <p class="hint">Enter how much of each salvage material you're carrying. You'll see the best place to sell all of it in one stop, and the best price for each material on its own.</p>
+      <div class="form">
+        <div id="sv-qty" class="qty-row"></div>
+        <label>Star system
+          <select id="sv-system"><option value="">All systems</option></select>
+        </label>
+        <label>Prices reported within
+          <select id="sv-age">
+            <option value="24">24 hours</option>
+            <option value="72">3 days</option>
+            <option value="168" selected>7 days</option>
+            <option value="">Any age</option>
+          </select>
+        </label>
+      </div>
+      <div class="fill-from">Fill from your ship: <span id="sv-ship-buttons"></span></div>
+      <div id="sv-summary" class="summary"></div>
+      <h2>Best places to sell everything <small class="muted">· ranked by the total value of your load</small></h2>
+      <div class="table-wrap"><table id="sv-table"></table></div>
+      <h2>Best price per material</h2>
+      <div id="sv-materials" class="material-grid"></div>
+    </section>
+
+    <!-- Salvage ships with how-to guides -->
+    <section id="tab-sv-ships" class="panel">
+      <p class="hint">Every ship built for salvage. Capacity and crew come from UEX. The "full hold" value uses the best RMC price right now. Click a ship's guide for step-by-step instructions.</p>
+      <div id="sv-ships" class="ship-grid"></div>
+      <h2>Salvage on foot</h2>
+      <div class="ship-grid">
+        <div class="ship-card">
+          <div class="ship-body">
+            <h3>Pyro RYT Multi-Tool + Cambio-Lite SRT</h3>
+            <div class="sub">No ship needed · fits in your hands</div>
+            <p>Clip the <b>Cambio-Lite SRT</b> attachment onto a multi-tool to scrape hull plating into a small canister. Add the <b>TruHold</b> tractor attachment to move components and boxes.</p>
+            <ul>
+              <li>Good for learning and for small repairs on your own ship.</li>
+              <li>The wiki notes that a filled canister sells for no more than an empty one, so it's not a money maker.</li>
+              <li>It can't do structural salvage. That needs a salvage ship.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="ship-card">
+          <div class="ship-body">
+            <h3>Greycat Cambio SRT &amp; MaxLift</h3>
+            <div class="sub">Rifle-sized tools · large weapon slot</div>
+            <p>The <b>Cambio SRT</b> is a dedicated scraping and repair tool. It's faster and holds more than the Cambio-Lite. The <b>MaxLift</b> is a heavy tractor beam for moving big components and boxes, even in gravity.</p>
+            <ul>
+              <li>Neither fits in a backpack. Carry them in a weapon slot.</li>
+              <li>A MaxLift is very handy next to a Vulture or Fortune for clearing jammed boxes and loading components.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tutorial -->
+    <section id="tab-sv-guide" class="panel guide">
+      <div class="guide-toc">
+        <a href="#sv-basics">How salvage works</a>
+        <a href="#sv-steps">Step by step</a>
+        <a href="#sv-contracts">Contracts &amp; missions</a>
+        <a href="#sv-legal">Staying legal</a>
+        <a href="#sv-modules">Scraper modules</a>
+        <a href="#sv-refine">Refining &amp; selling</a>
+        <a href="#sv-start">Where to start</a>
+      </div>
+
+      <div class="note version-note">
+        <p>Written for <b>Alpha 4.10</b>. Salvage changes often between patches. If something in-game doesn't match, trust the game and the mission briefing.</p>
+      </div>
+
+      <h2 id="sv-basics">How salvage works</h2>
+      <p>Salvage turns wrecks into aUEC in three ways. You usually do them in this order on the same wreck:</p>
+      <div class="steps-grid">
+        <div class="step-card"><div class="step-num">1</div><h3>Components &amp; cargo</h3><p>Use a tractor beam to pull off weapons, shields, power plants, coolers and quantum drives, plus any cargo boxes. Sell them at shops that sell those parts.</p></div>
+        <div class="step-card"><div class="step-num">2</div><h3>Hull scraping → RMC</h3><p>Scraper heads strip the outer plating into <b>Recycled Material Composite (RMC)</b>. It's ready to sell as soon as it's boxed.</p></div>
+        <div class="step-card"><div class="step-num">3</div><h3>Structural salvage → Construction Materials</h3><p><b>Fracture</b> the stripped hull into chunks, then <b>disintegrate</b> the chunks into raw material. Refine it into <b>Construction Materials</b>.</p></div>
+      </div>
+      <p class="sub">Always strip components and scrape first. Fracturing destroys any parts still attached, and RMC left on the chunks is lost.</p>
+
+      <h2 id="sv-steps">Step by step: salvaging a wreck</h2>
+      <ol class="steps">
+        <li><b>Find a wreck.</b> Take a salvage contract (see below), or find an abandoned or destroyed ship near busy areas and points of interest.</li>
+        <li><b>Scan it.</b> If the owner shows <b>"Gamerules"</b>, it's abandoned and safe to salvage. If a player's name shows, salvaging it can get you a CrimeStat.</li>
+        <li><b>Make it safe.</b> You can't scrape a ship that still has shields up. To fracture an intact ship, its power must be off. Board it and shut it down, or use distortion damage.</li>
+        <li><b>Strip the valuables.</b> Use a tractor beam to detach components. On a non-destroyed ship, the pilot seat has to unlock the ports first. Load them and any cargo boxes into your hold.</li>
+        <li><b>Scrape the hull.</b> Switch to salvage mode (default key <kbd>M</kbd> on most salvage ships, check <i>Options → Keybindings</i>). Sweep the beams over the plating until the panels are bare. Watch your material buffer.</li>
+        <li><b>Box it up.</b> When the buffer fills, the ship packs material into SCU boxes on its cargo grid or external rack. Keep space free or the process stops.</li>
+        <li><b>Fracture &amp; disintegrate</b> (optional, if your ship can handle the wreck's size). Break the hull into chunks, then disintegrate them into raw construction material.</li>
+        <li><b>Sell and refine.</b> Sell RMC and components. Take raw construction material to a refinery, then sell the Construction Materials. Use <a href="#/salvage/sell">Sell Salvage</a> to find the best stop.</li>
+      </ol>
+
+      <h2 id="sv-contracts">Salvage contracts &amp; missions</h2>
+      <p>Open your <b>mobiGlas → Contracts</b> and select the <b>Salvage</b> tab. There are two families of contracts:</p>
+      <div class="steps-grid">
+        <div class="step-card">
+          <h3>Wreck contracts</h3>
+          <p>The contract spawns one or more wrecks and gives you their location. You keep everything you salvage. Some versions:</p>
+          <ul>
+            <li><b>Salvage rights (legal):</b> a wreck you're allowed to salvage, usually with no time pressure. Best for learning.</li>
+            <li><b>Timed or risky jobs:</b> bigger wrecks with a countdown before security or pirates show up. Some pay a bonus for stripping the wreck enough or towing it away.</li>
+            <li><b>Multi-wreck events:</b> several large wrecks, often in lawless space. They can be shared with a crew.</li>
+          </ul>
+        </div>
+        <div class="step-card">
+          <h3>Delivery contracts</h3>
+          <p>The contract asks you to deliver a set amount of salvaged material (RMC or Construction Materials) and/or components to a location. You get paid on delivery.</p>
+          <ul>
+            <li>Check the amount and destination before you accept, and make sure your hold fits it.</li>
+            <li>Material you salvaged for a delivery contract can't also be sold, so compare the reward with the <a href="#/salvage/sell">sale value</a>.</li>
+          </ul>
+        </div>
+      </div>
+      <h3>How to complete a wreck contract</h3>
+      <ol class="steps">
+        <li>Read the briefing: the location, the wreck size, any time limit, and whether it's legal. Some contracts charge an entry fee, so check it against what the wreck is worth.</li>
+        <li>Accept it, set the marker as your route, and quantum to it.</li>
+        <li>Approach slowly and scan for other players or NPCs before you stop.</li>
+        <li>Follow <a href="#sv-steps">the steps above</a>: components, then scraping, then fracturing if your ship can.</li>
+        <li>If there's a timer, prioritise the most valuable parts and leave before it runs out.</li>
+        <li>Fly to a sell point and sell. Don't log off with loose material in your hold. It may not survive a server crash.</li>
+      </ol>
+      <p class="sub">Contract names, fees and rewards change between patches and regions. The briefing is always the reference.</p>
+
+      <h2 id="sv-legal">Staying legal</h2>
+      <p>Fracturing a ship counts the same as destroying it with weapons. You avoid fines and CrimeStat if the ship:</p>
+      <ul>
+        <li>is already destroyed,</li>
+        <li>has <b>"Gamerules"</b> as its owner (abandoned),</li>
+        <li>has no owner (spawned by a mission),</li>
+        <li>belongs to someone with CrimeStat 3 or more, or</li>
+        <li>is somewhere with no comm link (outside monitored space, or with the local comm array down).</li>
+      </ul>
+      <p class="warn-box">⚠ Salvaging any non-destroyed ship inside an <b>Armistice Zone</b>, even an abandoned one, gets you an Armistice Violation fine and a CrimeStat.</p>
+
+      <h2 id="sv-modules">Scraper modules</h2>
+      <p>The scraper heads on salvage ships can be swapped. Trade speed against how much RMC you keep:</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Module</th><th class="num">Speed</th><th class="num">Radius</th><th class="num">Efficiency</th><th>Best for</th></tr></thead>
+        <tbody>
+          <tr><td class="loc">Greycat Abrade</td><td class="num">0.15</td><td class="num">3.5</td><td class="num">90</td><td>All-rounder, good default</td></tr>
+          <tr><td class="loc">Greycat Cinch</td><td class="num">0.6</td><td class="num">1.5</td><td class="num">100</td><td>Keeping all the material, precise work</td></tr>
+          <tr><td class="loc">Greycat Comer</td><td class="num">0.7</td><td class="num">1.5</td><td class="num">80</td><td>Fast, narrow beam</td></tr>
+          <tr><td class="loc">Greycat Hart</td><td class="num">0.8</td><td class="num">1</td><td class="num">100</td><td>Fastest with no waste, very narrow</td></tr>
+          <tr><td class="loc">Greycat Trawler</td><td class="num">0.05</td><td class="num">6</td><td class="num">60</td><td>Huge area, but loses a lot of material</td></tr>
+        </tbody>
+      </table></div>
+      <p class="sub">Values from the Star Citizen wiki. Higher efficiency means more of the scraped plating becomes RMC.</p>
+
+      <h2 id="sv-refine">Refining &amp; selling</h2>
+      <ul>
+        <li><b>RMC</b> is ready to sell once it's boxed.</li>
+        <li><b>Structural salvage</b> gives raw material that has to be <b>refined</b> into Construction Materials. Light ships produce <i>Rubble</i> (fast to refine, lowest yield), the MOTH produces <i>Pieces</i>, and the Reclaimer produces <i>Salvage</i> (slowest, highest yield).</li>
+        <li>RMC and Construction Materials sell at <b>TDD</b> offices in cities, <b>CBD Lorville</b>, many stations, and salvage yards. Grim HEX and salvage yards usually pay less but ask fewer questions.</li>
+        <li>Components sell at shops that sell that same part.</li>
+        <li>Check the <b>max box size</b> of the sell terminal. Small outposts may not take 16 or 32 SCU boxes.</li>
+      </ul>
+
+      <h2 id="sv-start">Where to start</h2>
+      <ol class="steps">
+        <li><b>On foot:</b> a multi-tool with Cambio-Lite and TruHold attachments, to learn scraping and moving parts.</li>
+        <li><b>First ship:</b> an <b>RSI Salvation</b>, <b>MISC Fortune</b> or <b>Drake Vulture</b>. Take legal salvage contracts and sell RMC.</li>
+        <li><b>With friends:</b> an <b>Argo MOTH</b> or <b>Aegis Reclaimer</b> for big wrecks and structural salvage. Split pilot, scraping, tractor and cargo duties.</li>
+      </ol>
+
+      <div class="sources">
+        Sources: <a href="https://starcitizen.tools/Salvaging" target="_blank" rel="noopener">Star Citizen Wiki: Salvaging</a> ·
+        <a href="https://timesaver.gg/blog/star-citizen-salvage-guide-alpha-4-10" target="_blank" rel="noopener">Timesaver.gg salvage guide (4.10)</a> ·
+        <a href="https://star-citizen.help/guides/careers/salvaging-career-guide/" target="_blank" rel="noopener">Star Citizen Help: salvaging career</a>
+      </div>
+    </section>
+    </div>
   </main>
 
   <footer>
@@ -162,6 +373,7 @@
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 
-  <script src="app.js?v=12"></script>
+  <script src="app.js?v=14"></script>
+  <script src="salvage.js?v=14"></script>
 </body>
 </html>
