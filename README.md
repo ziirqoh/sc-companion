@@ -33,8 +33,12 @@ The front page (`#/`) shows live stats and a highlight from each tool. The tools
 
 ### Testing locally
 
-\UEX: 2580 prices, 161 terminals, 5 salvage ships. History: 1 snapshots.
-Wrote site to C:UsersenoiDesktopCodeStar Citizen_site
+```
+node scripts/serve.mjs . 4815            # the site, fetching UEX directly
+node scripts/update-data.mjs _site       # build the site with published data
+node scripts/serve.mjs _site 4816        # the site, using that data
+```
+
 ## Is it bannable?
 
 No. The site follows the rules that matter for Star Citizen's Terms of Service:
