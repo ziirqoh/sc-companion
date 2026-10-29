@@ -95,7 +95,7 @@ function cargoWarnings(c) {
 }
 
 const PREF_VALUES = ['s-location', 's-cargo', 's-budget', 's-sort', 'p-budget', 'p-cargo', 'p-from', 'p-system', 'p-age'];
-const PREF_CHECKS = ['s-cross', 'p-same', 'p-mix', 'p-illegal'];
+const PREF_CHECKS = ['s-cross', 'p-same', 'p-mix', 'p-illegal', 'p-loop'];
 
 function savePrefs() {
   const prefs = {};
@@ -509,15 +509,17 @@ function planRoutes() {
   const sameSystem = $('p-same').checked;
   const mix = $('p-mix').checked;
   const illegal = $('p-illegal').checked;
+  const loop = $('p-loop').checked;
   const maxAgeHours = Number($('p-age').value) || null;
   const minDate = maxAgeHours ? Date.now() / 1000 - maxAgeHours * 3600 : 0;
   const inSystem = (t) => !system || t?.star_system_name === system;
 
   // Group every profitable (buy row, sell row) by the pair of shops.
+  // "Start from" is applied later, so loop mode can still find the way back (B → A).
   const pairs = new Map();
   for (const b of data.prices) {
     if (!(b.price_buy > 0) || outOfStock(b) || b.date_modified < minDate) continue;
-    if (fromId && b.id_terminal !== fromId) continue;
+    if (fromId && !loop && b.id_terminal !== fromId) continue;
     const c = commoditiesById.get(b.id_commodity);
     if (!c || (c.is_illegal && !illegal)) continue;
     const bt = terminalsById.get(b.id_terminal);
@@ -535,11 +537,49 @@ function planRoutes() {
 
   const plans = [];
   for (const pair of pairs.values()) {
+    if (fromId && pair.buyId !== fromId) continue;
     const fill = fillHold(pair.items, cargo, budget, mix);
-    if (fill.profit > 0) plans.push({ ...pair, ...fill });
+    if (!(fill.profit > 0)) continue;
+    const plan = { ...pair, ...fill, total: fill.profit, need: fill.cost };
+    if (loop) {
+      // Loop: after selling at B, fill the same hold with what B sells and A buys back.
+      const reverse = pairs.get(`${pair.sellId}>${pair.buyId}`);
+      const back = reverse && fillHold(reverse.items, cargo, budget, mix);
+      plan.loop = true;
+      plan.back = back?.profit > 0 ? { ...reverse, ...back } : null;
+      plan.total += plan.back?.profit || 0;
+      plan.need = Math.max(fill.cost, plan.back?.cost || 0); // each leg is paid for with the money from the last sale
+    }
+    plans.push(plan);
   }
-  plans.sort((a, b) => b.profit - a.profit);
-  return { plans, budget, cargo };
+  plans.sort((a, b) => b.total - a.total || b.profit - a.profit);
+  if (loop && !fromId) {
+    // A ⇄ B and B ⇄ A are the same loop: keep one, the direction whose first leg earns more.
+    const seen = new Set();
+    return {
+      plans: plans.filter((p) => {
+        const id = [p.buyId, p.sellId].sort().join('<>');
+        return !seen.has(id) && seen.add(id);
+      }),
+      budget, cargo, loop,
+    };
+  }
+  return { plans, budget, cargo, loop };
+}
+
+// Return on the money you actually need up front (in a loop, the more expensive of the two legs).
+const roi = (p) => (p.need > 0 ? ((p.total / p.need) * 100).toFixed(1) + '%' : '—');
+const oldestOf = (p) => Math.min(...[p, p.back].filter(Boolean).flatMap((x) => x.lines.flatMap((l) => [l.b.date_modified, l.s.date_modified])));
+const cargoSummary = (fill) => fill.lines.map((l) => `${fmt(l.scu)} SCU ${esc(l.c.name)}`).join('<br>');
+
+// The buy list for a route; in loop mode, both legs.
+function routeLegs(p) {
+  if (!p.loop) return planLines(p);
+  return `
+    <h4 class="leg">Leg 1 · ${routeName(p.lines[0].b, p.bt)} → ${routeName(p.lines[0].s, p.st)} <span class="good">+${fmt(p.profit)}</span></h4>
+    ${planLines(p)}
+    <h4 class="leg">Leg 2 · ${routeName(p.lines[0].s, p.st)} → ${routeName(p.lines[0].b, p.bt)} ${p.back ? `<span class="good">+${fmt(p.back.profit)}</span>` : ''}</h4>
+    ${p.back ? planLines(p.back) : `<div class="empty">Nothing profitable to carry back from ${routeName(p.lines[0].s, p.st)} to ${routeName(p.lines[0].b, p.bt)} with these filters. Fly back empty.</div>`}`;
 }
 
 function routeName(row, t) {
@@ -577,7 +617,7 @@ function planLines(plan) {
 }
 
 function renderRoutes() {
-  const { plans, budget, cargo } = planRoutes();
+  const { plans, budget, cargo, loop } = planRoutes();
   const best = plans[0];
 
   if (!best) {
@@ -586,27 +626,31 @@ function renderRoutes() {
     return;
   }
 
-  const roi = (p) => (p.cost > 0 ? ((p.profit / p.cost) * 100).toFixed(1) + '%' : '—');
   const boxNote = best.st?.max_container_size ? ` · max box ${best.st.max_container_size} SCU` : '';
+  const loopStats = best.loop ? `
+          <div><div class="label">Leg 1 profit</div><div class="value good">+${fmt(best.profit)}</div></div>
+          <div><div class="label">Leg 2 profit</div><div class="value ${best.back ? 'good' : 'muted'}">${best.back ? '+' + fmt(best.back.profit) : 'empty'}</div></div>
+          <div><div class="label">Loop profit</div><div class="value good">+${fmt(best.total)}</div></div>` : `
+          <div><div class="label">Profit</div><div class="value good">+${fmt(best.total)}</div></div>`;
   $('p-plan').innerHTML = `
     <div class="plan">
       <div class="plan-head">
         <div>
-          <div class="label">Recommended for ${budget ? fmt(budget) + ' aUEC' : 'any budget'} and ${fmt(cargo)} SCU</div>
+          <div class="label">${best.loop ? 'Recommended loop' : 'Recommended'} for ${budget ? fmt(budget) + ' aUEC' : 'any budget'} and ${fmt(cargo)} SCU</div>
           <div class="route">
             <span>${routeName(best.lines[0].b, best.bt)}<small>${esc(terminalPlace(best.bt))}</small></span>
-            <span class="arrow">→</span>
+            <span class="arrow">${best.loop ? '⇄' : '→'}</span>
             <span>${routeName(best.lines[0].s, best.st)}<small>${esc(terminalPlace(best.st))}${boxNote}</small></span>
           </div>
         </div>
         <div class="plan-stats">
-          <div><div class="label">Invest</div><div class="value">${fmt(best.cost)}</div></div>
-          <div><div class="label">Profit</div><div class="value good">+${fmt(best.profit)}</div></div>
+          <div><div class="label">Invest</div><div class="value">${fmt(best.need)}</div></div>
+          ${loopStats}
           <div><div class="label">Return</div><div class="value">${roi(best)}</div></div>
           <div><div class="label">Cargo used</div><div class="value">${fmt(best.scu)} / ${fmt(cargo)}</div></div>
         </div>
       </div>
-      ${planLines(best)}
+      ${routeLegs(best)}
     </div>`;
 
   // One line per commodity (the item that earns the most on each route); click it for all its routes.
@@ -616,13 +660,12 @@ function renderRoutes() {
     if (!groups.has(main.c.id)) groups.set(main.c.id, { c: main.c, plans: [] });
     groups.get(main.c.id).plans.push(p);
   }
-  const oldestOf = (p) => Math.min(...p.lines.flatMap((l) => [l.b.date_modified, l.s.date_modified]));
-  const COLS = 10;
+  const COLS = loop ? 11 : 10;
 
   $('p-table').innerHTML = `
     <thead><tr>
-      <th>#</th><th>Commodity</th><th>Best buy at</th><th>Best sell at</th><th class="num">Invest</th><th class="num">Profit</th>
-      <th class="num">Return</th><th class="num">Cargo used</th><th class="num">Routes</th><th>Oldest report</th>
+      <th>#</th><th>Commodity</th><th>Best buy at</th><th>Best sell at</th>${loop ? '<th>Carry back</th>' : ''}<th class="num">Invest</th>
+      <th class="num">${loop ? 'Loop profit' : 'Profit'}</th><th class="num">Return</th><th class="num">Cargo used</th><th class="num">Routes</th><th>Oldest report</th>
     </tr></thead>
     <tbody>${[...groups.values()].slice(0, 30).map((g, i) => {
       const p = g.plans[0];
@@ -633,26 +676,27 @@ function renderRoutes() {
         <td><div class="loc">${esc(g.c.name)}</div><div class="sub">${cargoWarnings(g.c)}${p.lines.length > 1 ? ` + ${p.lines.length - 1} other good${p.lines.length > 2 ? 's' : ''}` : ''}</div></td>
         <td>${locCell(p.lines[0].b)}</td>
         <td>${locCell(p.lines[0].s)}</td>
-        <td class="num">${fmt(p.cost)}</td>
-        <td class="num good">+${fmt(p.profit)}</td>
+        ${loop ? `<td>${p.back ? cargoSummary(p.back) : '<span class="muted">nothing</span>'}</td>` : ''}
+        <td class="num">${fmt(p.need)}</td>
+        <td class="num good">+${fmt(p.total)}${p.back ? `<div class="sub">+${fmt(p.profit)} / +${fmt(p.back.profit)}</div>` : ''}</td>
         <td class="num">${roi(p)}</td>
         <td class="num">${fmt(p.scu)}</td>
         <td class="num">${g.plans.length}</td>
         <td class="${ageClass(oldestOf(p))}">${ago(oldestOf(p))}</td>
       </tr>
-      ${open ? `<tr class="detail"><td colspan="${COLS}">${groupRoutes(g, roi, oldestOf)}</td></tr>` : ''}`;
+      ${open ? `<tr class="detail"><td colspan="${COLS}">${groupRoutes(g, loop)}</td></tr>` : ''}`;
     }).join('')}
     </tbody>`;
 }
 
 // Every route for one commodity, best first. Click a route for its full buy list.
-function groupRoutes(g, roi, oldestOf) {
-  const COLS = 8;
+function groupRoutes(g, loop) {
+  const COLS = loop ? 9 : 8;
   return `
     <table class="inner">
       <thead><tr>
-        <th>Buy at</th><th>Sell at</th><th>What to buy</th><th class="num">Invest</th><th class="num">Profit</th>
-        <th class="num">Return</th><th class="num">Cargo used</th><th>Oldest report</th>
+        <th>Buy at</th><th>Sell at</th><th>What to buy</th>${loop ? '<th>Carry back</th>' : ''}<th class="num">Invest</th>
+        <th class="num">${loop ? 'Loop profit' : 'Profit'}</th><th class="num">Return</th><th class="num">Cargo used</th><th>Oldest report</th>
       </tr></thead>
       <tbody>${g.plans.slice(0, 25).map((p) => {
         const open = openRoute === p.key;
@@ -660,14 +704,15 @@ function groupRoutes(g, roi, oldestOf) {
         <tr class="clickable${open ? ' selected' : ''}" data-route="${p.key}">
           <td>${locCell(p.lines[0].b)}</td>
           <td>${locCell(p.lines[0].s)}</td>
-          <td>${open ? '▾' : '▸'} ${p.lines.map((l) => `${fmt(l.scu)} SCU ${esc(l.c.name)}`).join('<br>')}</td>
-          <td class="num">${fmt(p.cost)}</td>
-          <td class="num good">+${fmt(p.profit)}</td>
+          <td>${open ? '▾' : '▸'} ${cargoSummary(p)}</td>
+          ${loop ? `<td>${p.back ? cargoSummary(p.back) : '<span class="muted">nothing</span>'}</td>` : ''}
+          <td class="num">${fmt(p.need)}</td>
+          <td class="num good">+${fmt(p.total)}${p.back ? `<div class="sub">+${fmt(p.profit)} / +${fmt(p.back.profit)}</div>` : ''}</td>
           <td class="num">${roi(p)}</td>
           <td class="num">${fmt(p.scu)}</td>
           <td class="${ageClass(oldestOf(p))}">${ago(oldestOf(p))}</td>
         </tr>
-        ${open ? `<tr class="detail"><td colspan="${COLS}">${planLines(p)}</td></tr>` : ''}`;
+        ${open ? `<tr class="detail"><td colspan="${COLS}">${routeLegs(p)}</td></tr>` : ''}`;
       }).join('')}
       </tbody>
     </table>
@@ -930,7 +975,7 @@ function renderHome() {
   const plan = planRoutes();
   const p = plan.plans[0];
   $('home-routes').innerHTML = p
-    ? `<span class="label">${plan.budget ? fmt(plan.budget) + ' aUEC' : 'Any budget'}, ${fmt(plan.cargo)} SCU:</span> ${p.lines.map((l) => `${fmt(l.scu)} SCU <b>${esc(l.c.name)}</b>`).join(', ')} from ${esc(terminalName(p.bt))} to ${esc(terminalName(p.st))}, <span class="good">+${fmt(p.profit)} aUEC</span>`
+    ? `<span class="label">${plan.budget ? fmt(plan.budget) + ' aUEC' : 'Any budget'}, ${fmt(plan.cargo)} SCU:</span> ${p.lines.map((l) => `${fmt(l.scu)} SCU <b>${esc(l.c.name)}</b>`).join(', ')} from ${esc(terminalName(p.bt))} to ${esc(terminalName(p.st))}${p.back ? ', then ' + p.back.lines.map((l) => `${fmt(l.scu)} SCU <b>${esc(l.c.name)}</b>`).join(', ') + ' back' : ''}, <span class="good">+${fmt(p.total)} aUEC</span>`
     : '';
 
   // Commodity Guide: the biggest margin anywhere.
@@ -968,7 +1013,7 @@ on(['s-location'], 'change', () => { openSellRow = null; renderSell(); });
 on(['s-cargo', 's-budget'], 'input', renderSell);
 on(['s-sort', 's-cross'], 'change', renderSell);
 on(['p-budget', 'p-cargo'], 'input', () => { openGroup = openRoute = null; renderRoutes(); });
-on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
+on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal', 'p-loop'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
 on(['c-filter'], 'input', () => {
   // Typing a commodity's exact name or code (or narrowing to one result) opens it straight away.
   const filter = $('c-filter').value.trim().toLowerCase();
