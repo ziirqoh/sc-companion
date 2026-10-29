@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SC Companion</title>
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
   <header>
@@ -189,7 +189,7 @@
     <nav class="sub-nav">
       <a class="tab" data-tab="sell" href="#/salvage/sell">Sell Salvage</a>
       <a class="tab" data-tab="ships" href="#/salvage/ships">Salvage Ships</a>
-      <a class="tab" data-tab="haul" href="#/salvage/haul">Salvage Hauling</a>
+      <a class="tab" data-tab="crates" href="#/salvage/crates">Cargo Crates</a>
       <a class="tab" data-tab="guide" href="#/salvage/guide">Salvage Guide</a>
     </nav>
 
@@ -250,43 +250,61 @@
       </div>
     </section>
 
-    <!-- Hauling salvage goods for profit -->
-    <section id="tab-sv-haul" class="panel">
-      <p class="hint">RMC, Construction Materials and other salvage goods can be bought at some shops and sold for more at others. Enter your investment and cargo space to get the best salvage cargo run. Tick Loop to also carry something back.</p>
+    <!-- Cargo crates found while salvaging -->
+    <section id="tab-sv-crates" class="panel">
+      <p class="hint">Found cargo crates in a wreck or derelict? Add what's in each crate and how many SCU. You'll see where to sell it all, and how much it's worth.</p>
+      <div id="cr-rows" class="crate-rows"></div>
+      <datalist id="cr-list"></datalist>
       <div class="form">
-        <label>Investment (aUEC)
-          <input id="h-budget" class="money" type="text" inputmode="numeric" autocomplete="off" value="500,000">
-        </label>
-        <label>Cargo space (SCU)
-          <input id="h-cargo" type="number" min="1" step="1" value="96">
-        </label>
-        <label>Start from
-          <select id="h-from"><option value="">Anywhere</option></select>
-        </label>
+        <button id="cr-add" type="button">+ Add another crate</button>
         <label>Star system
-          <select id="h-system"><option value="">All systems</option></select>
+          <select id="cr-system"><option value="">All systems</option></select>
         </label>
         <label>Prices reported within
-          <select id="h-age">
+          <select id="cr-age">
             <option value="24">24 hours</option>
-            <option value="72" selected>3 days</option>
-            <option value="168">7 days</option>
+            <option value="72">3 days</option>
+            <option value="168" selected>7 days</option>
             <option value="">Any age</option>
           </select>
         </label>
-        <label class="check"><input id="h-same" type="checkbox" checked> Stay in one system</label>
-        <label class="check"><input id="h-mix" type="checkbox" checked> Mix goods to fill the hold</label>
-        <label class="check loop-check" title="After selling, buy salvage goods at the second location that the first location buys back"><input id="h-loop" type="checkbox"> Loop (round trip)</label>
       </div>
-      <div class="fill-from">Cargo space from a ship: <span id="h-ship-buttons"></span></div>
-      <div id="h-goods" class="summary"></div>
-      <div id="h-plan"></div>
-      <h2>More salvage hauling routes <small class="muted">· click one for its full buy list</small></h2>
-      <div class="table-wrap"><table id="h-table"></table></div>
-      <div class="note" style="margin-top:18px">
-        <h3>Hauling tips</h3>
-        <p>Check the <b>max box size</b> at both ends: outposts often only take small boxes. Salvage goods aren't illegal, so you can sell anywhere, but high-value loads still draw pirates. Avoid lingering at busy stations. Prices come from player reports, so check the "Reported" age before a long haul.</p>
+      <p id="cr-illegal" class="warn-box" hidden>⚠ Some of these goods are <b>illegal</b>. Only some terminals buy them (marked <span class="bad">no questions asked</span>), and being scanned with them can get you fined or a CrimeStat.</p>
+      <div id="cr-summary" class="summary"></div>
+      <h2>Best places to sell your crates <small class="muted">· ranked by the total value of your load</small></h2>
+      <div class="table-wrap"><table id="cr-table"></table></div>
+      <h2>Best price for each crate</h2>
+      <div id="cr-cards" class="material-grid"></div>
+
+      <h2>Finding and taking crates</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <h3>Where to find them</h3>
+          <ul>
+            <li>Inside and around <b>wrecks</b>: crashed ships on moons and planets, debris fields, and derelict ships in space.</li>
+            <li>In the wrecks spawned by <b>salvage contracts</b> (see the <a href="#/salvage/guide">Salvage Guide</a>).</li>
+            <li>In the hold of abandoned ships you're salvaging.</li>
+          </ul>
+        </div>
+        <div class="step-card">
+          <h3>How to take them</h3>
+          <ul>
+            <li>Look at a crate to see what's inside and its size in SCU.</li>
+            <li>Move it with a <b>tractor beam</b>: a multi-tool with the TruHold attachment, a MaxLift, or your ship's tractor beam.</li>
+            <li>Place it on your ship's cargo grid. Make sure the box size fits your grid.</li>
+            <li>Fly to a terminal that buys it and sell it from the commodity terminal there.</li>
+          </ul>
+        </div>
+        <div class="step-card">
+          <h3>Is it legal?</h3>
+          <ul>
+            <li>Crates from <b>destroyed</b>, <b>abandoned</b> ("Gamerules") or <b>mission-spawned</b> wrecks are fair game.</li>
+            <li>Taking cargo from a ship another player owns can be a crime.</li>
+            <li>Illegal goods only sell at no-questions-asked terminals, and you can be fined if you're scanned with them.</li>
+          </ul>
+        </div>
       </div>
+      <p class="sub">Check the max box size of the sell terminal before you go: small outposts may not take big crates.</p>
     </section>
 
     <!-- Tutorial -->
@@ -413,7 +431,7 @@
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 
-  <script src="app.js?v=15"></script>
-  <script src="salvage.js?v=15"></script>
+  <script src="app.js?v=16"></script>
+  <script src="salvage.js?v=16"></script>
 </body>
 </html>

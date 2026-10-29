@@ -197,13 +197,12 @@ function renderSalvage() {
   const keep = salvageFilters();
   renderSalvageSell(materials, keep);
   renderSalvageShips(keep);
-  renderHaul();
+  renderCrates(keep);
   renderSalvageHome(keep);
 }
 
 function renderSalvageSell(materials, keep) {
   const load = materials.filter((c) => svQty[c.id] > 0);
-  const totalScu = load.reduce((s, c) => s + svQty[c.id], 0);
 
   // Ship buttons fill RMC with the ship's capacity.
   const rmc = materials.find((c) => c.name === RMC);
@@ -211,87 +210,10 @@ function renderSalvageSell(materials, keep) {
     `<button class="chip" data-ship-scu="${v.scu}">${esc(v.name)} · ${fmt(v.scu)} SCU</button>`).join('') || '<span class="muted">loading ships…</span>';
   $('sv-ship-buttons').dataset.rmc = rmc?.id || '';
 
-  // Every terminal that buys at least one material you carry.
-  const shops = new Map();
-  for (const c of load) {
-    for (const p of sellByCommodity.get(c.id) || []) {
-      if (!keep(p)) continue;
-      if (!shops.has(p.id_terminal)) shops.set(p.id_terminal, { t: terminalsById.get(p.id_terminal), rows: new Map() });
-      shops.get(p.id_terminal).rows.set(c.id, p);
-    }
-  }
-  const stops = [...shops.values()].map((shop) => {
-    let total = 0;
-    const limited = [];
-    for (const c of load) {
-      const p = shop.rows.get(c.id);
-      if (!p) continue;
-      const scu = p.scu_sell > 0 ? Math.min(svQty[c.id], p.scu_sell) : svQty[c.id];
-      if (scu < svQty[c.id]) limited.push(`${esc(shortName(c))}: only ${fmt(scu)} SCU`);
-      total += scu * p.price_sell;
-    }
-    const missing = load.filter((c) => !shop.rows.has(c.id));
-    const oldest = Math.min(...[...shop.rows.values()].map((p) => p.date_modified));
-    return { ...shop, total, missing, limited, oldest };
-  }).sort((a, b) => b.total - a.total);
-
-  // Selling each material where it's worth the most, counting how much each shop will actually take.
-  const sellValue = (p, qty) => p.price_sell * (p.scu_sell > 0 ? Math.min(qty, p.scu_sell) : qty);
-  const perMaterial = load.map((c) => {
-    const best = (sellByCommodity.get(c.id) || []).filter(keep)
-      .reduce((a, p) => (!a || sellValue(p, svQty[c.id]) > sellValue(a, svQty[c.id]) ? p : a), null);
-    return { c, best, value: best ? sellValue(best, svQty[c.id]) : 0 };
-  });
-  const splitTotal = perMaterial.reduce((s, x) => s + x.value, 0);
-  const top = stops[0];
-
-  $('sv-summary').innerHTML = !load.length ? '<div class="card">Enter how many SCU of each material you carry.</div>' : `
-    <div class="card"><div class="label">Your load</div><div class="value">${fmt(totalScu)} SCU</div><div class="sub">${load.map((c) => `${fmt(svQty[c.id])} ${esc(shortName(c))}`).join(' · ')}</div></div>
-    ${top ? `<div class="card highlight"><div class="label">Best single stop</div><div class="value">${esc(terminalName(top.t) || '')}</div><div class="sub"><span class="good">${fmt(top.total)} aUEC</span> · ${esc(terminalPlace(top.t))}${top.missing.length ? ` · <span class="warn">doesn't buy ${top.missing.map((c) => esc(shortName(c))).join(', ')}</span>` : ''}</div></div>` : ''}
-    ${load.length > 1 ? `<div class="card"><div class="label">Selling each at its best price</div><div class="value">${fmt(splitTotal)} aUEC</div><div class="sub">${perMaterial.map((x) => x.best ? `${esc(shortName(x.c))} at ${esc(terminalName(terminalsById.get(x.best.id_terminal)) || x.best.terminal_name)}` : `${esc(shortName(x.c))}: nowhere`).join(' · ')}${top ? ` · <span class="${splitTotal > top.total ? 'good' : 'muted'}">${splitTotal > top.total ? '+' + fmt(splitTotal - top.total) + ' vs one stop' : 'no gain vs one stop'}</span>` : ''}</div></div>` : ''}`;
-
-  $('sv-table').innerHTML = !stops.length ? '<tr><td class="empty">No shop buys these materials with these filters. Try a wider system or older prices.</td></tr>' : `
-    <thead><tr>
-      <th>#</th><th>Sell at</th>${load.map((c) => `<th class="num">${esc(shortName(c))} / SCU</th>`).join('')}
-      <th class="num">Your load is worth</th><th>Notes</th><th>Max box</th><th>Oldest report</th>
-    </tr></thead>
-    <tbody>${stops.slice(0, 30).map((s, i) => `
-      <tr class="${i === 0 ? 'top' : ''}">
-        <td class="muted">${i + 1}</td>
-        <td><div class="loc">${esc(terminalName(s.t) || [...s.rows.values()][0].terminal_name)}</div><div class="sub">${esc(terminalPlace(s.t))}</div></td>
-        ${load.map((c) => {
-          const p = s.rows.get(c.id);
-          return `<td class="num">${p ? fmt(p.price_sell) + delta(p.price_sell, p.prev?.price_sell) + `<div>${statusPill(p.status_sell, true)}</div>` : '<span class="muted">doesn\'t buy</span>'}</td>`;
-        }).join('')}
-        <td class="num good"><b>${fmt(s.total)}</b></td>
-        <td class="sub">${[...s.limited, ...(s.missing.length ? [`<span class="warn">no ${s.missing.map((c) => esc(shortName(c))).join(', ')}</span>`] : [])].join('<br>') || '—'}</td>
-        <td>${s.t?.max_container_size ? s.t.max_container_size + ' SCU' : '—'}</td>
-        <td class="${ageClass(s.oldest)}">${ago(s.oldest)}</td>
-      </tr>`).join('')}
-    </tbody>`;
-
-  // One card per material with its top buyers.
-  $('sv-materials').innerHTML = materials.map((c) => {
-    const rows = (sellByCommodity.get(c.id) || []).filter(keep).slice(0, 8);
-    const qty = svQty[c.id] || 0;
-    return `
-      <div class="material-card">
-        <h3>${esc(c.name)}</h3>
-        <div class="sub">${c.name === RMC ? 'From hull scraping. Sell as is.' : c.name === CMAT ? 'From structural salvage, after refining.' : 'Sold and bought at shops like a trade good.'}</div>
-        ${rows.length ? `
-        <table class="inner">
-          <thead><tr><th>Location</th><th class="num">Price</th><th>Storage</th>${qty ? `<th class="num">${fmt(qty)} SCU</th>` : ''}</tr></thead>
-          <tbody>${rows.map((p, i) => `
-            <tr${i === 0 ? ' class="top"' : ''}>
-              <td>${locCell(p)}<div class="sub ${ageClass(p.date_modified)}">reported ${ago(p.date_modified)}</div></td>
-              <td class="num">${fmt(p.price_sell)}</td>
-              <td>${statusPill(p.status_sell, true)}</td>
-              ${qty ? `<td class="num good">${fmt(p.price_sell * (p.scu_sell > 0 ? Math.min(qty, p.scu_sell) : qty))}</td>` : ''}
-            </tr>`).join('')}
-          </tbody>
-        </table>` : '<div class="empty">No buyer with these filters.</div>'}
-      </div>`;
-  }).join('');
+  const items = load.map((c) => ({ c, qty: svQty[c.id] }));
+  const cards = materials.map((c) => ({ c, qty: svQty[c.id] || 0 }));
+  renderSellAll(items, keep, { summary: 'sv-summary', table: 'sv-table', cards: 'sv-materials' }, cards, salvageNote);
+  if (!load.length) $('sv-summary').innerHTML = '<div class="card">Enter how many SCU of each material you carry.</div>';
 }
 
 function renderSalvageShips(keep) {
@@ -350,133 +272,169 @@ function renderSalvageHome(keep) {
     : '';
 }
 
-// ---------- Salvage Hauling: buy salvage goods cheap, sell them where they pay more ----------
+// ---------- Selling a mixed load: shared by Sell Salvage and Cargo Crates ----------
 
-const isSalvageGood = (c) => c.kind === 'Scrap';
-let openHaul = null; // route key expanded in the hauling list
-let haulUiReady = false;
+// What each item sells for at a shop, counting how much the shop will actually take.
+const sellValue = (p, qty) => p.price_sell * (p.scu_sell > 0 ? Math.min(qty, p.scu_sell) : qty);
 
-const HAUL_FIELDS = ['h-budget', 'h-cargo', 'h-from', 'h-system', 'h-age'];
-const HAUL_CHECKS = ['h-same', 'h-mix', 'h-loop'];
-
-function initHaulUi() {
-  const sellsSalvage = new Set(data.prices.filter((p) => p.price_buy > 0 && isSalvageGood(commoditiesById.get(p.id_commodity) || {})).map((p) => p.id_terminal));
-  $('h-from').innerHTML = '<option value="">Anywhere</option>' + terminalOptions(data.terminals.filter((t) => sellsSalvage.has(t.id)));
-  const systems = [...new Set(data.terminals.map((t) => t.star_system_name).filter(Boolean))].sort();
-  $('h-system').innerHTML = '<option value="">All systems</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join('');
-
-  const saved = loadSalvagePrefs().haul || {};
-  for (const id of HAUL_FIELDS) {
-    const el = $(id);
-    if (saved[id] == null) continue;
-    if (el.tagName !== 'SELECT' || [...el.options].some((o) => o.value === saved[id])) el.value = saved[id];
-  }
-  for (const id of HAUL_CHECKS) if (saved[id] != null) $(id).checked = saved[id];
-  formatMoneyInput($('h-budget'));
-  haulUiReady = true;
+function salvageNote(c) {
+  if (c.name === RMC) return 'From hull scraping. Sell as is.';
+  if (c.name === CMAT) return 'From structural salvage, after refining.';
+  return c.kind === 'Scrap' ? 'Sold and bought at shops like a trade good.' : esc(c.kind || '');
 }
 
-function saveHaulPrefs() {
+// items: [{ c, qty }] with qty > 0 → summary cards, "sell everything" table, and one card per entry of cardItems.
+function renderSellAll(items, keep, ids, cardItems, note) {
+  const totalScu = items.reduce((s, x) => s + x.qty, 0);
+
+  // Every terminal that buys at least one thing you carry, and what your load is worth there.
+  const shops = new Map();
+  for (const { c } of items) {
+    for (const p of sellByCommodity.get(c.id) || []) {
+      if (!keep(p)) continue;
+      if (!shops.has(p.id_terminal)) shops.set(p.id_terminal, { t: terminalsById.get(p.id_terminal), rows: new Map() });
+      shops.get(p.id_terminal).rows.set(c.id, p);
+    }
+  }
+  const stops = [...shops.values()].map((shop) => {
+    let total = 0;
+    const limited = [];
+    for (const { c, qty } of items) {
+      const p = shop.rows.get(c.id);
+      if (!p) continue;
+      const scu = p.scu_sell > 0 ? Math.min(qty, p.scu_sell) : qty;
+      if (scu < qty) limited.push(`${esc(shortName(c))}: only ${fmt(scu)} SCU`);
+      total += scu * p.price_sell;
+    }
+    const missing = items.filter(({ c }) => !shop.rows.has(c.id)).map((x) => x.c);
+    const oldest = Math.min(...[...shop.rows.values()].map((p) => p.date_modified));
+    return { ...shop, total, missing, limited, oldest };
+  }).sort((a, b) => b.total - a.total);
+
+  // Selling each item where it's worth the most.
+  const perItem = items.map(({ c, qty }) => {
+    const best = (sellByCommodity.get(c.id) || []).filter(keep).reduce((a, p) => (!a || sellValue(p, qty) > sellValue(a, qty) ? p : a), null);
+    return { c, best, value: best ? sellValue(best, qty) : 0 };
+  });
+  const splitTotal = perItem.reduce((s, x) => s + x.value, 0);
+  const top = stops[0];
+
+  $(ids.summary).innerHTML = !items.length ? '' : `
+    <div class="card"><div class="label">Your load</div><div class="value">${fmt(totalScu)} SCU</div><div class="sub">${items.map(({ c, qty }) => `${fmt(qty)} ${esc(shortName(c))}`).join(' · ')}</div></div>
+    ${top ? `<div class="card highlight"><div class="label">Best single stop</div><div class="value">${esc(terminalName(top.t) || '')}</div><div class="sub"><span class="good">${fmt(top.total)} aUEC</span> · ${esc(terminalPlace(top.t))}${top.missing.length ? ` · <span class="warn">doesn't buy ${top.missing.map((c) => esc(shortName(c))).join(', ')}</span>` : ''}</div></div>` : ''}
+    ${items.length > 1 ? `<div class="card"><div class="label">Selling each at its best place</div><div class="value">${fmt(splitTotal)} aUEC</div><div class="sub">${perItem.map((x) => x.best ? `${esc(shortName(x.c))} at ${esc(terminalName(terminalsById.get(x.best.id_terminal)) || x.best.terminal_name)}` : `${esc(shortName(x.c))}: nowhere`).join(' · ')}${top ? ` · <span class="${splitTotal > top.total ? 'good' : 'muted'}">${splitTotal > top.total ? '+' + fmt(splitTotal - top.total) + ' vs one stop' : 'no gain vs one stop'}</span>` : ''}</div></div>` : ''}`;
+
+  $(ids.table).innerHTML = !items.length ? '' : !stops.length ? '<tr><td class="empty">No shop buys this with these filters. Try a wider system or older prices.</td></tr>' : `
+    <thead><tr>
+      <th>#</th><th>Sell at</th>${items.map(({ c }) => `<th class="num">${esc(shortName(c))} / SCU</th>`).join('')}
+      <th class="num">Your load is worth</th><th>Notes</th><th>Max box</th><th>Oldest report</th>
+    </tr></thead>
+    <tbody>${stops.slice(0, 30).map((s, i) => `
+      <tr class="${i === 0 ? 'top' : ''}">
+        <td class="muted">${i + 1}</td>
+        <td><div class="loc">${esc(terminalName(s.t) || [...s.rows.values()][0].terminal_name)}</div><div class="sub">${esc(terminalPlace(s.t))}${s.t?.is_nqa ? ' · <span class="bad">no questions asked</span>' : ''}</div></td>
+        ${items.map(({ c }) => {
+          const p = s.rows.get(c.id);
+          return `<td class="num">${p ? fmt(p.price_sell) + delta(p.price_sell, p.prev?.price_sell) + `<div>${statusPill(p.status_sell, true)}</div>` : '<span class="muted">doesn\'t buy</span>'}</td>`;
+        }).join('')}
+        <td class="num good"><b>${fmt(s.total)}</b></td>
+        <td class="sub">${[...s.limited, ...(s.missing.length ? [`<span class="warn">no ${s.missing.map((c) => esc(shortName(c))).join(', ')}</span>`] : [])].join('<br>') || '—'}</td>
+        <td>${s.t?.max_container_size ? s.t.max_container_size + ' SCU' : '—'}</td>
+        <td class="${ageClass(s.oldest)}">${ago(s.oldest)}</td>
+      </tr>`).join('')}
+    </tbody>`;
+
+  // One card per item with its top buyers.
+  $(ids.cards).innerHTML = cardItems.map(({ c, qty }) => {
+    const rows = (sellByCommodity.get(c.id) || []).filter(keep).slice(0, 8);
+    return `
+      <div class="material-card">
+        <h3>${esc(c.name)} ${cargoWarnings(c)}</h3>
+        <div class="sub">${note(c)}</div>
+        ${rows.length ? `
+        <table class="inner">
+          <thead><tr><th>Location</th><th class="num">Price</th><th>Storage</th>${qty ? `<th class="num">${fmt(qty)} SCU</th>` : ''}</tr></thead>
+          <tbody>${rows.map((p, i) => `
+            <tr${i === 0 ? ' class="top"' : ''}>
+              <td>${locCell(p)}<div class="sub ${ageClass(p.date_modified)}">reported ${ago(p.date_modified)}</div></td>
+              <td class="num">${fmt(p.price_sell)}</td>
+              <td>${statusPill(p.status_sell, true)}</td>
+              ${qty ? `<td class="num good">${fmt(sellValue(p, qty))}</td>` : ''}
+            </tr>`).join('')}
+          </tbody>
+        </table>` : '<div class="empty">No buyer with these filters.</div>'}
+      </div>`;
+  }).join('');
+}
+
+// ---------- Cargo Crates: boxes found in wrecks and derelicts ----------
+
+let crates = loadSalvagePrefs().crates || [{ name: '', qty: 0 }];
+let cratesUiReady = false;
+
+function saveCratePrefs() {
   const prefs = loadSalvagePrefs();
-  prefs.haul = {};
-  for (const id of HAUL_FIELDS) prefs.haul[id] = $(id).value;
-  for (const id of HAUL_CHECKS) prefs.haul[id] = $(id).checked;
+  prefs.crates = crates;
+  prefs.crateSystem = $('cr-system').value;
+  prefs.crateAge = $('cr-age').value;
   try { localStorage.setItem(SALVAGE_PREFS_KEY, JSON.stringify(prefs)); } catch {}
 }
 
-function renderHaul() {
-  if (!haulUiReady) initHaulUi();
+const commodityByName = (name) => data.commodities.find((c) => c.name.toLowerCase() === String(name).trim().toLowerCase());
 
-  $('h-ship-buttons').innerHTML = (salvageShips || []).map((v) =>
-    `<button class="chip" data-haul-scu="${v.scu}">${esc(v.name)} · ${fmt(v.scu)} SCU</button>`).join('') || '<span class="muted">loading ships…</span>';
+function drawCrateRows() {
+  $('cr-rows').innerHTML = crates.map((cr, i) => `
+    <div class="crate-row" data-index="${i}">
+      <label class="wide">What's in the crate
+        <input type="text" list="cr-list" data-field="name" value="${esc(cr.name)}" placeholder="Type a commodity, e.g. Gold, Medical Supplies…" autocomplete="off">
+      </label>
+      <label>SCU
+        <input type="number" min="0" step="1" data-field="qty" value="${cr.qty || ''}" placeholder="0">
+      </label>
+      <button class="remove" data-remove="${i}" title="Remove this crate"${crates.length === 1 ? ' disabled' : ''}>✕</button>
+      <span class="crate-status sub"></span>
+    </div>`).join('');
+}
 
-  const opts = {
-    budget: num($('h-budget')),
-    cargo: num($('h-cargo')) || 0,
-    fromId: Number($('h-from').value) || null,
-    system: $('h-system').value,
-    sameSystem: $('h-same').checked,
-    mix: $('h-mix').checked,
-    illegal: true,
-    loop: $('h-loop').checked,
-    maxAgeHours: Number($('h-age').value) || null,
-    only: isSalvageGood,
-  };
-  const minDate = opts.maxAgeHours ? Date.now() / 1000 - opts.maxAgeHours * 3600 : 0;
+function initCratesUi() {
+  const sellable = data.commodities.filter((c) => sellByCommodity.has(c.id)).sort((a, b) => a.name.localeCompare(b.name));
+  $('cr-list').innerHTML = sellable.map((c) => `<option value="${esc(c.name)}">`).join('');
+  const systems = [...new Set(data.terminals.map((t) => t.star_system_name).filter(Boolean))].sort();
+  $('cr-system').innerHTML = '<option value="">All systems</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join('');
+  const prefs = loadSalvagePrefs();
+  if (prefs.crateSystem && systems.includes(prefs.crateSystem)) $('cr-system').value = prefs.crateSystem;
+  if (prefs.crateAge != null && [...$('cr-age').options].some((o) => o.value === prefs.crateAge)) $('cr-age').value = prefs.crateAge;
+  drawCrateRows();
+  cratesUiReady = true;
+}
 
-  // Quick overview: cheapest buy and best sell for each salvage good.
-  $('h-goods').innerHTML = data.commodities.filter((c) => isSalvageGood(c) && sellByCommodity.has(c.id)).map((c) => {
-    const buy = data.prices.filter((p) => p.id_commodity === c.id && p.price_buy > 0 && !outOfStock(p) && p.date_modified >= minDate)
-      .reduce((a, p) => (!a || p.price_buy < a.price_buy ? p : a), null);
-    const sell = (sellByCommodity.get(c.id) || []).find((p) => p.date_modified >= minDate);
-    if (!buy && !sell) return '';
-    const margin = buy && sell ? sell.price_sell - buy.price_buy : null;
-    return `
-      <div class="card">
-        <div class="label">${esc(c.name)}</div>
-        <div class="value ${margin > 0 ? 'good' : margin != null ? 'bad' : ''}">${margin == null ? '—' : (margin > 0 ? '+' : '') + fmt(margin) + ' / SCU'}</div>
-        <div class="sub">${buy ? `buy ${fmt(buy.price_buy)} at ${esc(terminalName(terminalsById.get(buy.id_terminal)) || buy.terminal_name)}` : 'not sold in shops'}<br>${sell ? `sell ${fmt(sell.price_sell)} at ${esc(terminalName(terminalsById.get(sell.id_terminal)) || sell.terminal_name)}` : 'no buyer'}</div>
-      </div>`;
-  }).join('');
+function renderCrates() {
+  if (!cratesUiReady) initCratesUi();
+  const maxAgeHours = Number($('cr-age').value) || null;
+  const minDate = maxAgeHours ? Date.now() / 1000 - maxAgeHours * 3600 : 0;
+  const system = $('cr-system').value;
+  const keep = (p) => p.date_modified >= minDate && (!system || terminalsById.get(p.id_terminal)?.star_system_name === system);
 
-  const { plans, budget, cargo, loop } = planRoutes(opts);
-  if (!plans.length) {
-    $('h-plan').innerHTML = '<div class="card empty">No profitable salvage hauling run with these settings. Try a bigger investment, another system, older prices or untick "Stay in one system".</div>';
-    $('h-table').innerHTML = '';
-    return;
-  }
-  $('h-plan').innerHTML = planCard(plans[0], budget, cargo);
+  // Merge crates of the same commodity, and flag names that don't match a known commodity.
+  const merged = new Map();
+  document.querySelectorAll('#cr-rows .crate-row').forEach((row) => {
+    const cr = crates[Number(row.dataset.index)];
+    const c = cr.name.trim() && commodityByName(cr.name);
+    const status = row.querySelector('.crate-status');
+    if (!cr.name.trim()) status.innerHTML = '';
+    else if (!c) status.innerHTML = '<span class="warn">Unknown commodity. Pick one from the list.</span>';
+    else if (!sellByCommodity.has(c.id)) status.innerHTML = '<span class="warn">No shop buys this.</span>';
+    else status.innerHTML = cr.qty > 0 ? `<span class="good">≈ ${fmt(sellValue((sellByCommodity.get(c.id) || []).find(keep) || { price_sell: 0 }, cr.qty))} aUEC at best price</span>` : '';
+    if (c && cr.qty > 0 && sellByCommodity.has(c.id)) merged.set(c.id, { c, qty: (merged.get(c.id)?.qty || 0) + cr.qty });
+  });
+  const items = [...merged.values()];
 
-  const COLS = loop ? 10 : 9;
-  $('h-table').innerHTML = `
-    <thead><tr>
-      <th>#</th><th>Buy at</th><th>Sell at</th><th>What to buy</th>${loop ? '<th>Carry back</th>' : ''}
-      <th class="num">Invest</th><th class="num">${loop ? 'Loop profit' : 'Profit'}</th><th class="num">Return</th><th class="num">Cargo used</th><th>Oldest report</th>
-    </tr></thead>
-    <tbody>${plans.slice(1, 26).map((p, i) => {
-      const open = openHaul === p.key;
-      return `
-      <tr class="clickable${open ? ' selected' : ''}" data-haul="${p.key}">
-        <td class="muted">${open ? '▾' : '▸'} ${i + 2}</td>
-        <td>${locCell(p.lines[0].b)}</td>
-        <td>${locCell(p.lines[0].s)}</td>
-        <td>${cargoSummary(p)}</td>
-        ${loop ? `<td>${p.back ? cargoSummary(p.back) : '<span class="muted">nothing</span>'}</td>` : ''}
-        <td class="num">${fmt(p.need)}</td>
-        <td class="num good">+${fmt(p.total)}${p.back ? `<div class="sub">+${fmt(p.profit)} / +${fmt(p.back.profit)}</div>` : ''}</td>
-        <td class="num">${roi(p)}</td>
-        <td class="num">${fmt(p.scu)}</td>
-        <td class="${ageClass(oldestOf(p))}">${ago(oldestOf(p))}</td>
-      </tr>
-      ${open ? `<tr class="detail"><td colspan="${COLS}">${routeLegs(p)}</td></tr>` : ''}`;
-    }).join('')}
-    </tbody>`;
+  renderSellAll(items, keep, { summary: 'cr-summary', table: 'cr-table', cards: 'cr-cards' }, items, (c) => esc(c.kind || ''));
+  if (!items.length) $('cr-summary').innerHTML = '<div class="card">Add the crates you found: pick what\'s inside and how many SCU.</div>';
+  $('cr-illegal').hidden = !items.some(({ c }) => c.is_illegal);
 }
 
 // ---------- wiring ----------
-
-HAUL_FIELDS.concat(HAUL_CHECKS).forEach((id) => $(id).addEventListener($(id).tagName === 'SELECT' || $(id).type === 'checkbox' ? 'change' : 'input', () => {
-  if (!data) return;
-  openHaul = null;
-  saveHaulPrefs();
-  renderHaul();
-}));
-
-$('h-ship-buttons').addEventListener('click', (e) => {
-  const btn = e.target.closest('[data-haul-scu]');
-  if (!btn || !data) return;
-  $('h-cargo').value = btn.dataset.haulScu;
-  openHaul = null;
-  saveHaulPrefs();
-  renderHaul();
-});
-
-$('h-table').addEventListener('click', (e) => {
-  const tr = e.target.closest('tr[data-haul]');
-  if (!tr) return;
-  openHaul = openHaul === tr.dataset.haul ? null : tr.dataset.haul;
-  renderHaul();
-});
 
 $('sv-qty').addEventListener('input', (e) => {
   const id = e.target.dataset.material;
@@ -510,3 +468,38 @@ document.querySelectorAll('.guide a[href^="#sv-"]').forEach((a) =>
     document.getElementById(a.getAttribute('href').slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   })
 );
+
+// Typing only redraws the results, so the crate inputs keep focus.
+$('cr-rows').addEventListener('input', (e) => {
+  const row = e.target.closest('.crate-row');
+  if (!row || !data) return;
+  const cr = crates[Number(row.dataset.index)];
+  if (e.target.dataset.field === 'name') cr.name = e.target.value;
+  else cr.qty = Math.max(0, Number(e.target.value) || 0);
+  saveCratePrefs();
+  renderCrates();
+});
+
+$('cr-rows').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-remove]');
+  if (!btn || !data || crates.length === 1) return;
+  crates.splice(Number(btn.dataset.remove), 1);
+  saveCratePrefs();
+  drawCrateRows();
+  renderCrates();
+});
+
+$('cr-add').addEventListener('click', () => {
+  if (!data) return;
+  crates.push({ name: '', qty: 0 });
+  saveCratePrefs();
+  drawCrateRows();
+  renderCrates();
+  document.querySelector('#cr-rows .crate-row:last-child input[data-field="name"]')?.focus();
+});
+
+['cr-system', 'cr-age'].forEach((id) => $(id).addEventListener('change', () => {
+  if (!data) return;
+  saveCratePrefs();
+  renderCrates();
+}));
