@@ -94,7 +94,7 @@ function cargoWarnings(c) {
   ].filter(Boolean).join('');
 }
 
-const PREF_VALUES = ['s-location', 's-cargo', 's-budget', 's-sort', 'p-budget', 'p-cargo', 'p-from', 'p-system', 'p-age'];
+const PREF_VALUES = ['s-location', 's-cargo', 's-budget', 's-sort', 'p-budget', 'p-cargo', 'p-start-system', 'p-end-system', 'p-from', 'p-age'];
 const PREF_CHECKS = ['s-cross', 'p-same', 'p-mix', 'p-illegal', 'p-loop'];
 
 function savePrefs() {
@@ -308,7 +308,9 @@ function initSelectors() {
   setOptions($('p-from'), '<option value="">Anywhere</option>' + terminalOptions(shops));
 
   const systems = [...new Set(data.terminals.map((t) => t.star_system_name).filter(Boolean))].sort();
-  setOptions($('p-system'), '<option value="">All systems</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join(''));
+  const systemOptions = '<option value="">Any system</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join('');
+  setOptions($('p-start-system'), systemOptions);
+  setOptions($('p-end-system'), systemOptions);
 
   const kinds = [...new Set(data.commodities.map((c) => c.kind).filter(Boolean))].sort();
   setOptions($('c-kind'), '<option value="">All kinds</option>' + kinds.map((k) => `<option>${esc(k)}</option>`).join(''));
@@ -328,6 +330,21 @@ function initSelectors() {
     }
     selectorsReady = true;
   }
+  updatePlannerControls();
+}
+
+// "Start from" only lists shops in the chosen start system, and "Stay in one system"
+// is greyed out once both systems are picked (they already decide the trip).
+function updatePlannerControls() {
+  const start = $('p-start-system').value;
+  const sellsSomething = new Set(data.prices.filter((p) => p.price_buy > 0).map((p) => p.id_terminal));
+  const shops = data.terminals.filter((t) => sellsSomething.has(t.id) && (!start || t.star_system_name === start));
+  setOptions($('p-from'), '<option value="">Anywhere</option>' + terminalOptions(shops));
+
+  const both = !!(start && $('p-end-system').value);
+  $('p-same').disabled = both;
+  $('p-same').closest('label').classList.toggle('muted', both);
+  $('p-same').closest('label').title = both ? 'Not needed: you picked both a start and an end system' : '';
 }
 
 // ---------- Sell Finder ----------
@@ -485,13 +502,14 @@ function fillHold(items, cargo, budget, mix) {
   return byRoi.profit > byMargin.profit ? byRoi : byMargin;
 }
 
-// Best Routes settings. Other planners (Salvage Hauling) pass their own options and a commodity filter.
+// Best Routes settings. Callers can also pass their own options, e.g. a commodity filter in `only`.
 function plannerOptions() {
   return {
     budget: num($('p-budget')),
     cargo: num($('p-cargo')) || 0,
     fromId: Number($('p-from').value) || null,
-    system: $('p-system').value,
+    startSystem: $('p-start-system').value,
+    endSystem: $('p-end-system').value,
     sameSystem: $('p-same').checked,
     mix: $('p-mix').checked,
     illegal: $('p-illegal').checked,
@@ -502,12 +520,16 @@ function plannerOptions() {
 }
 
 function planRoutes(opts = plannerOptions()) {
-  const { budget, cargo, fromId, system, sameSystem, mix, illegal, loop, maxAgeHours, only } = opts;
+  const { budget, cargo, fromId, startSystem, endSystem, mix, illegal, loop, maxAgeHours, only } = opts;
+  // Picking both systems decides the trip, so "Stay in one system" only applies while one of them is "Any".
+  const sameSystem = opts.sameSystem && !(startSystem && endSystem);
   const minDate = maxAgeHours ? Date.now() / 1000 - maxAgeHours * 3600 : 0;
-  const inSystem = (t) => !system || t?.star_system_name === system;
+  const sys = (t) => t?.star_system_name;
+  // Is buying at `from` and selling at `to` the trip the player asked for? (Empty system = any.)
+  const outbound = (from, to) => (!startSystem || sys(from) === startSystem) && (!endSystem || sys(to) === endSystem);
 
   // Group every profitable (buy row, sell row) by the pair of shops.
-  // "Start from" is applied later, so loop mode can still find the way back (B → A).
+  // "Start from" and the systems are checked later too, so loop mode can still find the way back (B → A).
   const pairs = new Map();
   for (const b of data.prices) {
     if (!(b.price_buy > 0) || outOfStock(b) || b.date_modified < minDate) continue;
@@ -515,12 +537,12 @@ function planRoutes(opts = plannerOptions()) {
     const c = commoditiesById.get(b.id_commodity);
     if (!c || (c.is_illegal && !illegal) || (only && !only(c))) continue;
     const bt = terminalsById.get(b.id_terminal);
-    if (!inSystem(bt)) continue;
     for (const s of sellByCommodity.get(b.id_commodity) || []) {
       if (s.price_sell <= b.price_buy) break; // sorted by price, nothing further is profitable
       if (s.id_terminal === b.id_terminal || s.date_modified < minDate) continue;
       const st = terminalsById.get(s.id_terminal);
-      if (!inSystem(st) || (sameSystem && bt?.star_system_name !== st?.star_system_name)) continue;
+      if (sameSystem && sys(bt) !== sys(st)) continue;
+      if (!outbound(bt, st) && !(loop && outbound(st, bt))) continue;
       const key = `${b.id_terminal}>${s.id_terminal}`;
       if (!pairs.has(key)) pairs.set(key, { key, bt, st, buyId: b.id_terminal, sellId: s.id_terminal, items: [] });
       pairs.get(key).items.push({ c, b, s, margin: s.price_sell - b.price_buy });
@@ -529,7 +551,7 @@ function planRoutes(opts = plannerOptions()) {
 
   const plans = [];
   for (const pair of pairs.values()) {
-    if (fromId && pair.buyId !== fromId) continue;
+    if ((fromId && pair.buyId !== fromId) || !outbound(pair.bt, pair.st)) continue;
     const fill = fillHold(pair.items, cargo, budget, mix);
     if (!(fill.profit > 0)) continue;
     const plan = { ...pair, ...fill, total: fill.profit, need: fill.cost };
@@ -1016,7 +1038,8 @@ on(['s-location'], 'change', () => { openSellRow = null; renderSell(); });
 on(['s-cargo', 's-budget'], 'input', renderSell);
 on(['s-sort', 's-cross'], 'change', renderSell);
 on(['p-budget', 'p-cargo'], 'input', () => { openGroup = openRoute = null; renderRoutes(); });
-on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal', 'p-loop'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
+on(['p-start-system', 'p-end-system'], 'change', () => { updatePlannerControls(); openGroup = openRoute = null; renderRoutes(); });
+on(['p-from', 'p-age', 'p-same', 'p-mix', 'p-illegal', 'p-loop'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
 on(['c-filter'], 'input', () => {
   // Typing a commodity's exact name or code (or narrowing to one result) opens it straight away.
   const filter = $('c-filter').value.trim().toLowerCase();
