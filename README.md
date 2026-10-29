@@ -23,10 +23,10 @@ The front page (`#/`) shows live stats and a highlight from each tool. The tools
 
 ## How the data works
 
-- **Every 15 minutes, even when nobody has the site open,** the GitHub Actions workflow in  runs . It:
+- **Every 15 minutes, even when nobody has the site open,** the GitHub Actions workflow in `.github/workflows/update-data.yml` runs `scripts/update-data.mjs`. It:
   1. fetches the latest data from the public [UEX Corp](https://uexcorp.space) API (players report this data, because the game has no official API),
   2. adds it to a 24 h history, read back from the live site so nothing is committed,
-  3. publishes the site together with ,  and .
+  3. publishes the site together with `data/latest.json`, `data/history.json` and `data/meta.json`.
 - The page loads those files and shows the same data and stock charts to everyone. When the next update is due, it checks for it every 30 seconds.
 - If the published data is missing or more than 25 minutes old, the page fetches UEX directly instead. This happens when GitHub runs late or when you're testing locally. The ↻ button does the same, limited to once a minute.
 - GitHub's scheduler can run a few minutes late when it's busy. It also pauses scheduled runs in a repo with no activity for 60 days. Re-enable it from the Actions tab if that happens.
