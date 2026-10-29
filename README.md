@@ -18,6 +18,7 @@ The front page (`#/`) shows live stats and a highlight from each tool. The tools
 |---|---|
 | **Sell Salvage** | Enter how many SCU of RMC, Construction Materials and other salvage goods you carry. It ranks the best single place to sell all of it, compares that with selling each material at its own best price, and lists the top buyers for each material. You can fill the quantities from a salvage ship's capacity in one click. |
 | **Salvage Ships** | Every salvage ship from UEX with cargo, crew, pad size and fracture limit, what a full hold of RMC is worth now, and a step-by-step guide for each ship. It also covers salvaging on foot with the multi-tool, Cambio and MaxLift. |
+| **Salvage Hauling** | Cargo runs that only use salvage goods (RMC, Construction Materials, Compboard, Scrap): buy where they are cheap, sell where they pay more. Enter your investment and cargo space, with mix-to-fill and Loop (round trip). It also shows the margin of each salvage good at a glance. |
 | **Salvage Guide** | How salvage works, salvaging a wreck step by step, salvage contracts and how to complete them, legality, scraper modules, refining and selling, and where to start. It's written for Alpha 4.10 from the Star Citizen wiki. |
 
 ## How the data works

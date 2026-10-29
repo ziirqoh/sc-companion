@@ -189,6 +189,7 @@
     <nav class="sub-nav">
       <a class="tab" data-tab="sell" href="#/salvage/sell">Sell Salvage</a>
       <a class="tab" data-tab="ships" href="#/salvage/ships">Salvage Ships</a>
+      <a class="tab" data-tab="haul" href="#/salvage/haul">Salvage Hauling</a>
       <a class="tab" data-tab="guide" href="#/salvage/guide">Salvage Guide</a>
     </nav>
 
@@ -246,6 +247,45 @@
             </ul>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Hauling salvage goods for profit -->
+    <section id="tab-sv-haul" class="panel">
+      <p class="hint">RMC, Construction Materials and other salvage goods can be bought at some shops and sold for more at others. Enter your investment and cargo space to get the best salvage cargo run. Tick Loop to also carry something back.</p>
+      <div class="form">
+        <label>Investment (aUEC)
+          <input id="h-budget" class="money" type="text" inputmode="numeric" autocomplete="off" value="500,000">
+        </label>
+        <label>Cargo space (SCU)
+          <input id="h-cargo" type="number" min="1" step="1" value="96">
+        </label>
+        <label>Start from
+          <select id="h-from"><option value="">Anywhere</option></select>
+        </label>
+        <label>Star system
+          <select id="h-system"><option value="">All systems</option></select>
+        </label>
+        <label>Prices reported within
+          <select id="h-age">
+            <option value="24">24 hours</option>
+            <option value="72" selected>3 days</option>
+            <option value="168">7 days</option>
+            <option value="">Any age</option>
+          </select>
+        </label>
+        <label class="check"><input id="h-same" type="checkbox" checked> Stay in one system</label>
+        <label class="check"><input id="h-mix" type="checkbox" checked> Mix goods to fill the hold</label>
+        <label class="check loop-check" title="After selling, buy salvage goods at the second location that the first location buys back"><input id="h-loop" type="checkbox"> Loop (round trip)</label>
+      </div>
+      <div class="fill-from">Cargo space from a ship: <span id="h-ship-buttons"></span></div>
+      <div id="h-goods" class="summary"></div>
+      <div id="h-plan"></div>
+      <h2>More salvage hauling routes <small class="muted">· click one for its full buy list</small></h2>
+      <div class="table-wrap"><table id="h-table"></table></div>
+      <div class="note" style="margin-top:18px">
+        <h3>Hauling tips</h3>
+        <p>Check the <b>max box size</b> at both ends: outposts often only take small boxes. Salvage goods aren't illegal, so you can sell anywhere, but high-value loads still draw pirates. Avoid lingering at busy stations. Prices come from player reports, so check the "Reported" age before a long haul.</p>
       </div>
     </section>
 
@@ -373,7 +413,7 @@
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 
-  <script src="app.js?v=14"></script>
-  <script src="salvage.js?v=14"></script>
+  <script src="app.js?v=15"></script>
+  <script src="salvage.js?v=15"></script>
 </body>
 </html>

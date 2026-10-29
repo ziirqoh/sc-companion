@@ -197,6 +197,7 @@ function renderSalvage() {
   const keep = salvageFilters();
   renderSalvageSell(materials, keep);
   renderSalvageShips(keep);
+  renderHaul();
   renderSalvageHome(keep);
 }
 
@@ -349,7 +350,133 @@ function renderSalvageHome(keep) {
     : '';
 }
 
+// ---------- Salvage Hauling: buy salvage goods cheap, sell them where they pay more ----------
+
+const isSalvageGood = (c) => c.kind === 'Scrap';
+let openHaul = null; // route key expanded in the hauling list
+let haulUiReady = false;
+
+const HAUL_FIELDS = ['h-budget', 'h-cargo', 'h-from', 'h-system', 'h-age'];
+const HAUL_CHECKS = ['h-same', 'h-mix', 'h-loop'];
+
+function initHaulUi() {
+  const sellsSalvage = new Set(data.prices.filter((p) => p.price_buy > 0 && isSalvageGood(commoditiesById.get(p.id_commodity) || {})).map((p) => p.id_terminal));
+  $('h-from').innerHTML = '<option value="">Anywhere</option>' + terminalOptions(data.terminals.filter((t) => sellsSalvage.has(t.id)));
+  const systems = [...new Set(data.terminals.map((t) => t.star_system_name).filter(Boolean))].sort();
+  $('h-system').innerHTML = '<option value="">All systems</option>' + systems.map((s) => `<option>${esc(s)}</option>`).join('');
+
+  const saved = loadSalvagePrefs().haul || {};
+  for (const id of HAUL_FIELDS) {
+    const el = $(id);
+    if (saved[id] == null) continue;
+    if (el.tagName !== 'SELECT' || [...el.options].some((o) => o.value === saved[id])) el.value = saved[id];
+  }
+  for (const id of HAUL_CHECKS) if (saved[id] != null) $(id).checked = saved[id];
+  formatMoneyInput($('h-budget'));
+  haulUiReady = true;
+}
+
+function saveHaulPrefs() {
+  const prefs = loadSalvagePrefs();
+  prefs.haul = {};
+  for (const id of HAUL_FIELDS) prefs.haul[id] = $(id).value;
+  for (const id of HAUL_CHECKS) prefs.haul[id] = $(id).checked;
+  try { localStorage.setItem(SALVAGE_PREFS_KEY, JSON.stringify(prefs)); } catch {}
+}
+
+function renderHaul() {
+  if (!haulUiReady) initHaulUi();
+
+  $('h-ship-buttons').innerHTML = (salvageShips || []).map((v) =>
+    `<button class="chip" data-haul-scu="${v.scu}">${esc(v.name)} · ${fmt(v.scu)} SCU</button>`).join('') || '<span class="muted">loading ships…</span>';
+
+  const opts = {
+    budget: num($('h-budget')),
+    cargo: num($('h-cargo')) || 0,
+    fromId: Number($('h-from').value) || null,
+    system: $('h-system').value,
+    sameSystem: $('h-same').checked,
+    mix: $('h-mix').checked,
+    illegal: true,
+    loop: $('h-loop').checked,
+    maxAgeHours: Number($('h-age').value) || null,
+    only: isSalvageGood,
+  };
+  const minDate = opts.maxAgeHours ? Date.now() / 1000 - opts.maxAgeHours * 3600 : 0;
+
+  // Quick overview: cheapest buy and best sell for each salvage good.
+  $('h-goods').innerHTML = data.commodities.filter((c) => isSalvageGood(c) && sellByCommodity.has(c.id)).map((c) => {
+    const buy = data.prices.filter((p) => p.id_commodity === c.id && p.price_buy > 0 && !outOfStock(p) && p.date_modified >= minDate)
+      .reduce((a, p) => (!a || p.price_buy < a.price_buy ? p : a), null);
+    const sell = (sellByCommodity.get(c.id) || []).find((p) => p.date_modified >= minDate);
+    if (!buy && !sell) return '';
+    const margin = buy && sell ? sell.price_sell - buy.price_buy : null;
+    return `
+      <div class="card">
+        <div class="label">${esc(c.name)}</div>
+        <div class="value ${margin > 0 ? 'good' : margin != null ? 'bad' : ''}">${margin == null ? '—' : (margin > 0 ? '+' : '') + fmt(margin) + ' / SCU'}</div>
+        <div class="sub">${buy ? `buy ${fmt(buy.price_buy)} at ${esc(terminalName(terminalsById.get(buy.id_terminal)) || buy.terminal_name)}` : 'not sold in shops'}<br>${sell ? `sell ${fmt(sell.price_sell)} at ${esc(terminalName(terminalsById.get(sell.id_terminal)) || sell.terminal_name)}` : 'no buyer'}</div>
+      </div>`;
+  }).join('');
+
+  const { plans, budget, cargo, loop } = planRoutes(opts);
+  if (!plans.length) {
+    $('h-plan').innerHTML = '<div class="card empty">No profitable salvage hauling run with these settings. Try a bigger investment, another system, older prices or untick "Stay in one system".</div>';
+    $('h-table').innerHTML = '';
+    return;
+  }
+  $('h-plan').innerHTML = planCard(plans[0], budget, cargo);
+
+  const COLS = loop ? 10 : 9;
+  $('h-table').innerHTML = `
+    <thead><tr>
+      <th>#</th><th>Buy at</th><th>Sell at</th><th>What to buy</th>${loop ? '<th>Carry back</th>' : ''}
+      <th class="num">Invest</th><th class="num">${loop ? 'Loop profit' : 'Profit'}</th><th class="num">Return</th><th class="num">Cargo used</th><th>Oldest report</th>
+    </tr></thead>
+    <tbody>${plans.slice(1, 26).map((p, i) => {
+      const open = openHaul === p.key;
+      return `
+      <tr class="clickable${open ? ' selected' : ''}" data-haul="${p.key}">
+        <td class="muted">${open ? '▾' : '▸'} ${i + 2}</td>
+        <td>${locCell(p.lines[0].b)}</td>
+        <td>${locCell(p.lines[0].s)}</td>
+        <td>${cargoSummary(p)}</td>
+        ${loop ? `<td>${p.back ? cargoSummary(p.back) : '<span class="muted">nothing</span>'}</td>` : ''}
+        <td class="num">${fmt(p.need)}</td>
+        <td class="num good">+${fmt(p.total)}${p.back ? `<div class="sub">+${fmt(p.profit)} / +${fmt(p.back.profit)}</div>` : ''}</td>
+        <td class="num">${roi(p)}</td>
+        <td class="num">${fmt(p.scu)}</td>
+        <td class="${ageClass(oldestOf(p))}">${ago(oldestOf(p))}</td>
+      </tr>
+      ${open ? `<tr class="detail"><td colspan="${COLS}">${routeLegs(p)}</td></tr>` : ''}`;
+    }).join('')}
+    </tbody>`;
+}
+
 // ---------- wiring ----------
+
+HAUL_FIELDS.concat(HAUL_CHECKS).forEach((id) => $(id).addEventListener($(id).tagName === 'SELECT' || $(id).type === 'checkbox' ? 'change' : 'input', () => {
+  if (!data) return;
+  openHaul = null;
+  saveHaulPrefs();
+  renderHaul();
+}));
+
+$('h-ship-buttons').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-haul-scu]');
+  if (!btn || !data) return;
+  $('h-cargo').value = btn.dataset.haulScu;
+  openHaul = null;
+  saveHaulPrefs();
+  renderHaul();
+});
+
+$('h-table').addEventListener('click', (e) => {
+  const tr = e.target.closest('tr[data-haul]');
+  if (!tr) return;
+  openHaul = openHaul === tr.dataset.haul ? null : tr.dataset.haul;
+  renderHaul();
+});
 
 $('sv-qty').addEventListener('input', (e) => {
   const id = e.target.dataset.material;

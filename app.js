@@ -501,16 +501,24 @@ function fillHold(items, cargo, budget, mix) {
   return byRoi.profit > byMargin.profit ? byRoi : byMargin;
 }
 
-function planRoutes() {
-  const budget = num($('p-budget'));
-  const cargo = num($('p-cargo')) || 0;
-  const fromId = Number($('p-from').value) || null;
-  const system = $('p-system').value;
-  const sameSystem = $('p-same').checked;
-  const mix = $('p-mix').checked;
-  const illegal = $('p-illegal').checked;
-  const loop = $('p-loop').checked;
-  const maxAgeHours = Number($('p-age').value) || null;
+// Best Routes settings. Other planners (Salvage Hauling) pass their own options and a commodity filter.
+function plannerOptions() {
+  return {
+    budget: num($('p-budget')),
+    cargo: num($('p-cargo')) || 0,
+    fromId: Number($('p-from').value) || null,
+    system: $('p-system').value,
+    sameSystem: $('p-same').checked,
+    mix: $('p-mix').checked,
+    illegal: $('p-illegal').checked,
+    loop: $('p-loop').checked,
+    maxAgeHours: Number($('p-age').value) || null,
+    only: null, // optional (commodity) => boolean
+  };
+}
+
+function planRoutes(opts = plannerOptions()) {
+  const { budget, cargo, fromId, system, sameSystem, mix, illegal, loop, maxAgeHours, only } = opts;
   const minDate = maxAgeHours ? Date.now() / 1000 - maxAgeHours * 3600 : 0;
   const inSystem = (t) => !system || t?.star_system_name === system;
 
@@ -521,7 +529,7 @@ function planRoutes() {
     if (!(b.price_buy > 0) || outOfStock(b) || b.date_modified < minDate) continue;
     if (fromId && !loop && b.id_terminal !== fromId) continue;
     const c = commoditiesById.get(b.id_commodity);
-    if (!c || (c.is_illegal && !illegal)) continue;
+    if (!c || (c.is_illegal && !illegal) || (only && !only(c))) continue;
     const bt = terminalsById.get(b.id_terminal);
     if (!inSystem(bt)) continue;
     for (const s of sellByCommodity.get(b.id_commodity) || []) {
@@ -616,23 +624,15 @@ function planLines(plan) {
     </table>`;
 }
 
-function renderRoutes() {
-  const { plans, budget, cargo, loop } = planRoutes();
-  const best = plans[0];
-
-  if (!best) {
-    $('p-plan').innerHTML = '<div class="card empty">No profitable route with this investment and these filters. Try a bigger budget, more cargo space or fewer filters.</div>';
-    $('p-table').innerHTML = '';
-    return;
-  }
-
+// The highlighted "recommended" plan card, shared by Best Routes and Salvage Hauling.
+function planCard(best, budget, cargo) {
   const boxNote = best.st?.max_container_size ? ` · max box ${best.st.max_container_size} SCU` : '';
   const loopStats = best.loop ? `
           <div><div class="label">Leg 1 profit</div><div class="value good">+${fmt(best.profit)}</div></div>
           <div><div class="label">Leg 2 profit</div><div class="value ${best.back ? 'good' : 'muted'}">${best.back ? '+' + fmt(best.back.profit) : 'empty'}</div></div>
           <div><div class="label">Loop profit</div><div class="value good">+${fmt(best.total)}</div></div>` : `
           <div><div class="label">Profit</div><div class="value good">+${fmt(best.total)}</div></div>`;
-  $('p-plan').innerHTML = `
+  return `
     <div class="plan">
       <div class="plan-head">
         <div>
@@ -652,6 +652,19 @@ function renderRoutes() {
       </div>
       ${routeLegs(best)}
     </div>`;
+}
+
+function renderRoutes() {
+  const { plans, budget, cargo, loop } = planRoutes();
+  const best = plans[0];
+
+  if (!best) {
+    $('p-plan').innerHTML = '<div class="card empty">No profitable route with this investment and these filters. Try a bigger budget, more cargo space or fewer filters.</div>';
+    $('p-table').innerHTML = '';
+    return;
+  }
+
+  $('p-plan').innerHTML = planCard(best, budget, cargo);
 
   // One line per commodity (the item that earns the most on each route); click it for all its routes.
   const groups = new Map();
