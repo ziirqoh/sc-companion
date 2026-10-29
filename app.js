@@ -732,9 +732,10 @@ function renderCommodities() {
     <tbody>${list.map((c) => {
       const s = stats.get(c.id);
       const margin = marginOf(s);
+      const open = openCommodity === c.id;
       return `
-      <tr>
-        <td><div class="loc">${esc(c.name)}</div><div class="sub">${esc(c.code)}</div></td>
+      <tr class="clickable${open ? ' selected' : ''}" data-commodity="${c.id}">
+        <td><div class="loc">${open ? '▾' : '▸'} ${esc(c.name)}</div><div class="sub">${esc(c.code)}</div></td>
         <td>${esc(c.kind || '—')}</td>
         <td>${tags(c) || '<span class="muted">—</span>'}</td>
         <td class="num">${s.minBuy ? fmt(s.minBuy.price_buy) : '—'}</td>
@@ -744,9 +745,127 @@ function renderCommodities() {
         <td class="num ${margin > 0 ? 'good' : ''}">${margin == null ? '—' : fmt(margin)}</td>
         <td class="num">${s.buyAt} buy · ${s.sellAt} sell</td>
         <td>${c.wiki ? `<a href="${esc(c.wiki)}" target="_blank" rel="noopener">wiki</a>` : ''}</td>
-      </tr>`;
+      </tr>
+      ${open ? `<tr class="detail"><td colspan="${COMMODITY_COLUMNS.length}"><div id="c-explorer">${commodityExplorer(c)}</div></td></tr>` : ''}`;
     }).join('')}
     </tbody>`;
+  return list;
+}
+
+// ---------- Commodity explorer: every buy and sell location, pick a pair, see profit or loss ----------
+
+let openCommodity = null;
+let explorer = { buyId: null, sellId: null, scu: null }; // picked terminals and quantity (null = automatic)
+
+function explorerRows(c) {
+  const buys = data.prices.filter((p) => p.id_commodity === c.id && p.price_buy > 0).sort((a, b) => a.price_buy - b.price_buy);
+  const sells = sellByCommodity.get(c.id) || [];
+  const buy = buys.find((p) => p.id_terminal === explorer.buyId) || buys.find((p) => !outOfStock(p)) || buys[0] || null;
+  const sell = sells.find((p) => p.id_terminal === explorer.sellId) || sells.find((p) => p.id_terminal !== buy?.id_terminal) || null;
+  return { buys, sells, buy, sell };
+}
+
+// Default quantity: 96 SCU, capped by the shop's stock and the buyer's demand when known.
+function explorerScu(buy, sell) {
+  if (explorer.scu != null) return explorer.scu;
+  let scu = 96;
+  if (buy?.scu_buy > 0) scu = Math.min(scu, buy.scu_buy);
+  if (sell?.scu_sell > 0) scu = Math.min(scu, sell.scu_sell);
+  return Math.max(1, scu);
+}
+
+function explorerCalc(c) {
+  const { buy, sell } = explorerRows(c);
+  if (!buy || !sell) return '';
+  const scu = explorerScu(buy, sell);
+  const bt = terminalsById.get(buy.id_terminal);
+  const st = terminalsById.get(sell.id_terminal);
+  const margin = sell.price_sell - buy.price_buy;
+  const cost = buy.price_buy * scu;
+  const revenue = sell.price_sell * scu;
+  const profit = revenue - cost;
+  const cls = profit >= 0 ? 'good' : 'bad';
+
+  const notes = [];
+  if (buy.scu_buy > 0 && scu > buy.scu_buy) notes.push(`<span class="warn">${esc(terminalName(bt))} only has ${fmt(buy.scu_buy)} SCU in stock.</span>`);
+  if (sell.scu_sell > 0 && scu > sell.scu_sell) notes.push(`<span class="warn">${esc(terminalName(st))} only buys ${fmt(sell.scu_sell)} SCU.</span>`);
+  if (bt && st && bt.star_system_name !== st.star_system_name) notes.push(`Needs a jump: ${esc(bt.star_system_name)} → ${esc(st.star_system_name)}.`);
+  const boxes = [bt?.max_container_size, st?.max_container_size].filter(Boolean);
+  if (boxes.length) notes.push(`Use boxes of ${Math.min(...boxes)} SCU or smaller.`);
+  const oldest = Math.min(buy.date_modified, sell.date_modified);
+  notes.push(`<span class="${ageClass(oldest)}">Oldest price reported ${ago(oldest)}.</span>`);
+
+  return `
+    <div class="calc-route">
+      <div><div class="label">Buy at</div><div class="value">${esc(terminalName(bt) || buy.terminal_name)}</div><div class="sub">${esc(terminalPlace(bt))} · ${fmt(buy.price_buy)} / SCU</div></div>
+      <div class="arrow">→</div>
+      <div><div class="label">Sell at</div><div class="value">${esc(terminalName(st) || sell.terminal_name)}</div><div class="sub">${esc(terminalPlace(st))} · ${fmt(sell.price_sell)} / SCU</div></div>
+    </div>
+    <div class="calc-stats">
+      <div><div class="label">Per SCU</div><div class="value ${cls}">${margin >= 0 ? '+' : ''}${fmt(margin)}</div></div>
+      <div><div class="label">Cost</div><div class="value">${fmt(cost)}</div></div>
+      <div><div class="label">Revenue</div><div class="value">${fmt(revenue)}</div></div>
+      <div><div class="label">${profit >= 0 ? 'Profit' : 'Loss'}</div><div class="value ${cls}">${profit >= 0 ? '+' : ''}${fmt(profit)} aUEC</div></div>
+      <div><div class="label">Return</div><div class="value ${cls}">${cost > 0 ? ((profit / cost) * 100).toFixed(1) + '%' : '—'}</div></div>
+    </div>
+    <div class="sub calc-notes">${notes.join(' ')}</div>`;
+}
+
+function commodityExplorer(c) {
+  const { buys, sells, buy, sell } = explorerRows(c);
+  const scu = explorerScu(buy, sell);
+
+  const buyTable = !buys.length ? '<div class="empty">No shop sells this commodity. It has to be mined, harvested or looted.</div>' : `
+    <table class="inner">
+      <thead><tr><th></th><th>Location</th><th class="num">Price</th><th class="num">Stock</th><th>Level</th><th class="num">${sell ? 'Profit' : ''}</th></tr></thead>
+      <tbody>${buys.map((p) => {
+        const picked = p === buy;
+        const m = sell ? sell.price_sell - p.price_buy : null;
+        return `
+        <tr class="clickable${picked ? ' picked' : ''}${outOfStock(p) ? ' dim' : ''}" data-pick="buy" data-terminal="${p.id_terminal}">
+          <td class="pick">${picked ? '●' : '○'}</td>
+          <td>${locCell(p)}<div class="sub ${ageClass(p.date_modified)}">reported ${ago(p.date_modified)}</div></td>
+          <td class="num">${fmt(p.price_buy)}${delta(p.price_buy, p.prev?.price_buy)}</td>
+          <td class="num">${fmt(p.scu_buy)}${delta(p.scu_buy, p.prev?.scu_buy)}</td>
+          <td>${statusPill(p.status_buy)}</td>
+          <td class="num ${m >= 0 ? 'good' : 'bad'}">${m == null ? '' : (m >= 0 ? '+' : '') + fmt(m)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+
+  const sellTable = !sells.length ? '<div class="empty">No shop buys this commodity.</div>' : `
+    <table class="inner">
+      <thead><tr><th></th><th>Location</th><th class="num">Price</th><th class="num">Will buy</th><th>Storage</th><th class="num">${buy ? 'Profit' : ''}</th></tr></thead>
+      <tbody>${sells.map((p) => {
+        const picked = p === sell;
+        const m = buy ? p.price_sell - buy.price_buy : null;
+        return `
+        <tr class="clickable${picked ? ' picked' : ''}" data-pick="sell" data-terminal="${p.id_terminal}">
+          <td class="pick">${picked ? '●' : '○'}</td>
+          <td>${locCell(p)}<div class="sub ${ageClass(p.date_modified)}">reported ${ago(p.date_modified)}</div></td>
+          <td class="num">${fmt(p.price_sell)}${delta(p.price_sell, p.prev?.price_sell)}</td>
+          <td class="num">${p.scu_sell > 0 ? fmt(p.scu_sell) : '<span class="muted">unknown</span>'}</td>
+          <td>${statusPill(p.status_sell, true)}</td>
+          <td class="num ${m >= 0 ? 'good' : 'bad'}">${m == null ? '' : (m >= 0 ? '+' : '') + fmt(m)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody>
+    </table>`;
+
+  return `
+    ${buy && sell ? `
+    <div class="calc">
+      <div class="calc-head">
+        <h3>Profit calculator</h3>
+        <label>Quantity (SCU) <input id="c-scu" type="number" min="1" step="1" value="${scu}"></label>
+      </div>
+      <div id="c-calc">${explorerCalc(c)}</div>
+    </div>` : ''}
+    <div class="explorer">
+      <div><h3>Where to buy (${buys.length}) <span class="sub">· click to pick · prices per SCU</span></h3>${buyTable}</div>
+      <div><h3>Where to sell (${sells.length}) <span class="sub">· click to pick · prices per SCU</span></h3>${sellTable}</div>
+    </div>`;
 }
 
 // ---------- wiring ----------
@@ -830,12 +949,48 @@ on(['s-cargo', 's-budget'], 'input', renderSell);
 on(['s-sort', 's-cross'], 'change', renderSell);
 on(['p-budget', 'p-cargo'], 'input', () => { openGroup = openRoute = null; renderRoutes(); });
 on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
-on(['c-filter'], 'input', renderCommodities);
+on(['c-filter'], 'input', () => {
+  // Typing a commodity's exact name or code (or narrowing to one result) opens it straight away.
+  const filter = $('c-filter').value.trim().toLowerCase();
+  const list = renderCommodities();
+  const target = filter && (list.find((c) => c.name.toLowerCase() === filter || c.code.toLowerCase() === filter) || (list.length === 1 ? list[0] : null));
+  if (target && openCommodity !== target.id) {
+    openCommodity = target.id;
+    explorer = { buyId: null, sellId: null, scu: null };
+    renderCommodities();
+  }
+});
 on(['c-kind'], 'change', renderCommodities);
 
 $('c-table').addEventListener('click', (e) => {
+  if (!data || e.target.closest('a, input, label')) return;
   const th = e.target.closest('th[data-sort]');
-  if (th && data) cycleCommoditySort(th.dataset.sort);
+  if (th) return cycleCommoditySort(th.dataset.sort);
+
+  const pick = e.target.closest('tr[data-pick]');
+  if (pick) {
+    explorer[pick.dataset.pick === 'buy' ? 'buyId' : 'sellId'] = Number(pick.dataset.terminal);
+    const top = $('c-explorer').getBoundingClientRect().top;
+    renderCommodities();
+    window.scrollBy(0, $('c-explorer').getBoundingClientRect().top - top); // keep the view steady
+    return;
+  }
+
+  const row = e.target.closest('tr[data-commodity]');
+  if (row) {
+    const id = Number(row.dataset.commodity);
+    openCommodity = openCommodity === id ? null : id;
+    explorer = { buyId: null, sellId: null, scu: null };
+    renderCommodities();
+  }
+});
+
+// Quantity changes only redraw the calculator, so the input keeps focus while typing.
+$('c-table').addEventListener('input', (e) => {
+  if (e.target.id !== 'c-scu') return;
+  explorer.scu = Math.max(1, Number(e.target.value) || 1);
+  const c = commoditiesById.get(openCommodity);
+  if (c) $('c-calc').innerHTML = explorerCalc(c);
 });
 
 $('s-table').addEventListener('click', (e) => {
