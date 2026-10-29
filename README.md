@@ -1,7 +1,8 @@
 # SC Companion
 
 A free Star Citizen helper website: static files (`index.html`, `style.css`, `shape.js`, `app.js`, `salvage.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
-nLive site: https://ziirqoh.github.io/sc-companion/
+
+Live site: https://ziirqoh.github.io/sc-companion/
 
 The front page (`#/`) shows live stats and a highlight from each tool. The tools are grouped under **Trade Companion** (`#/trade/...`) and **Salvage Companion** (`#/salvage/...`).
 
