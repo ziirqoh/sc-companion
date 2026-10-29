@@ -160,3 +160,7 @@ details.more summary { cursor: pointer; color: var(--accent); margin-bottom: 10p
 .route small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); }
 .route .arrow { color: var(--good); }
 .plan-stats { display: flex; gap: 22px; flex-wrap: wrap; }
+
+th.sortable { cursor: pointer; user-select: none; }
+th.sortable:hover { color: var(--text); }
+th.sorted { color: var(--accent); }

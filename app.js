@@ -655,6 +655,31 @@ function groupRoutes(g, roi, oldestOf) {
 
 // ---------- Commodity guide ----------
 
+// Clicking a header cycles: first direction → reversed → back to A–Z by name.
+// Numbers start highest first, text starts A–Z.
+const COMMODITY_COLUMNS = [
+  { key: 'name', label: 'Commodity', value: (c) => c.name },
+  { key: 'kind', label: 'Kind', value: (c) => c.kind || null },
+  { key: 'traits', label: 'Traits', num: false, first: 'desc', value: (c, s, m, tags) => (tags(c).match(/class="badge/g) || []).length || null },
+  { key: 'buy', label: 'Cheapest buy', num: true, value: (c, s) => s.minBuy?.price_buy ?? null },
+  { key: 'buyAt', label: 'Where', value: (c, s) => s.minBuy?.terminal_name ?? null },
+  { key: 'sell', label: 'Best sell', num: true, value: (c, s) => s.maxSell?.price_sell ?? null },
+  { key: 'sellAt', label: 'Where', value: (c, s) => s.maxSell?.terminal_name ?? null },
+  { key: 'margin', label: 'Max margin', num: true, value: (c, s, marginOf) => marginOf(s) },
+  { key: 'shops', label: 'Shops', num: true, value: (c, s) => s.buyAt + s.sellAt },
+  { key: 'wiki' },
+];
+let commoditySort = null; // { key, dir: 'asc' | 'desc' } or null for the default A–Z
+
+function cycleCommoditySort(key) {
+  const col = COMMODITY_COLUMNS.find((k) => k.key === key);
+  const first = col.first || (col.num ? 'desc' : 'asc');
+  if (commoditySort?.key !== key) commoditySort = { key, dir: first };
+  else if (commoditySort.dir === first) commoditySort = { key, dir: first === 'desc' ? 'asc' : 'desc' };
+  else commoditySort = null;
+  renderCommodities();
+}
+
 function renderCommodities() {
   const filter = $('c-filter').value.trim().toLowerCase();
   const kind = $('c-kind').value;
@@ -667,12 +692,6 @@ function renderCommodities() {
     if (p.price_sell > 0) { s.sellAt++; if (!s.maxSell || p.price_sell > s.maxSell.price_sell) s.maxSell = p; }
   }
 
-  const list = data.commodities
-    .filter((c) => stats.has(c.id))
-    .filter((c) => !kind || c.kind === kind)
-    .filter((c) => !filter || `${c.name} ${c.code} ${c.kind}`.toLowerCase().includes(filter))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
   const tags = (c) => cargoWarnings(c) + [
     c.is_raw && '<span class="badge">Raw ore</span>',
     c.is_refinable && '<span class="badge">Refinable</span>',
@@ -682,15 +701,36 @@ function renderCommodities() {
     c.is_temporary && '<span class="badge">Event</span>',
   ].filter(Boolean).join('');
 
+  const marginOf = (s) => (s.minBuy && s.maxSell ? s.maxSell.price_sell - s.minBuy.price_buy : null);
+  const col = COMMODITY_COLUMNS.find((k) => k.key === commoditySort?.key);
+  const list = data.commodities
+    .filter((c) => stats.has(c.id))
+    .filter((c) => !kind || c.kind === kind)
+    .filter((c) => !filter || `${c.name} ${c.code} ${c.kind}`.toLowerCase().includes(filter))
+    .sort((a, b) => {
+      if (col) {
+        const va = col.value(a, stats.get(a.id), marginOf, tags);
+        const vb = col.value(b, stats.get(b.id), marginOf, tags);
+        // Empty values always go last, whatever the direction.
+        if (va == null || vb == null) return va == null ? (vb == null ? 0 : 1) : -1;
+        const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb;
+        if (cmp) return commoditySort.dir === 'asc' ? cmp : -cmp;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+  const header = (k) => {
+    if (!k.value) return `<th></th>`;
+    const active = commoditySort?.key === k.key;
+    const arrow = active ? (commoditySort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+    return `<th class="sortable${k.num ? ' num' : ''}${active ? ' sorted' : ''}" data-sort="${k.key}" title="Click to sort">${k.label}${arrow}</th>`;
+  };
+
   $('c-table').innerHTML = `
-    <thead><tr>
-      <th>Commodity</th><th>Kind</th><th>Traits</th>
-      <th class="num">Cheapest buy</th><th>Where</th><th class="num">Best sell</th><th>Where</th>
-      <th class="num">Max margin</th><th class="num">Shops</th><th></th>
-    </tr></thead>
+    <thead><tr>${COMMODITY_COLUMNS.map(header).join('')}</tr></thead>
     <tbody>${list.map((c) => {
       const s = stats.get(c.id);
-      const margin = s.minBuy && s.maxSell ? s.maxSell.price_sell - s.minBuy.price_buy : null;
+      const margin = marginOf(s);
       return `
       <tr>
         <td><div class="loc">${esc(c.name)}</div><div class="sub">${esc(c.code)}</div></td>
@@ -732,6 +772,11 @@ on(['p-budget', 'p-cargo'], 'input', () => { openGroup = openRoute = null; rende
 on(['p-from', 'p-system', 'p-age', 'p-same', 'p-mix', 'p-illegal'], 'change', () => { openGroup = openRoute = null; renderRoutes(); });
 on(['c-filter'], 'input', renderCommodities);
 on(['c-kind'], 'change', renderCommodities);
+
+$('c-table').addEventListener('click', (e) => {
+  const th = e.target.closest('th[data-sort]');
+  if (th && data) cycleCommoditySort(th.dataset.sort);
+});
 
 $('s-table').addEventListener('click', (e) => {
   const tr = e.target.closest('tr[data-commodity]');
