@@ -1,19 +1,41 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- SC Companion: a navigation star inside an orbit, with a planet on the ring. -->
+  <!-- SC Companion: HUR-L3 Thundering Express Station, a spine with two spoked rings. -->
   <defs>
     <radialGradient id="bg" cx=".3" cy=".25" r="1">
       <stop offset="0" stop-color="#1b2c3d"/>
       <stop offset="1" stop-color="#070b10"/>
     </radialGradient>
-    <linearGradient id="star" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#9be6ff"/>
-      <stop offset="1" stop-color="#1c8bd6"/>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#dbe7f0"/>
+      <stop offset="1" stop-color="#7f95a8"/>
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="14" fill="url(#bg)"/>
   <rect x="1" y="1" width="62" height="62" rx="13" fill="none" stroke="#3fc1ff" stroke-opacity=".35" stroke-width="2"/>
-  <ellipse cx="32" cy="32" rx="25" ry="9.5" fill="none" stroke="#3fc1ff" stroke-opacity=".75" stroke-width="2.6" transform="rotate(-25 32 32)"/>
-  <path d="M32 8 L36.5 27.5 L56 32 L36.5 36.5 L32 56 L27.5 36.5 L8 32 L27.5 27.5 Z" fill="url(#star)"/>
-  <circle cx="32" cy="32" r="3.4" fill="#0b1016"/>
-  <circle cx="49.5" cy="18.3" r="4.3" fill="#ffb547" stroke="#0b1016" stroke-width="1.5"/>
+  <g fill="#cfe9ff" opacity=".7">
+    <circle cx="11" cy="12" r=".9"/><circle cx="52" cy="10" r=".7"/><circle cx="56" cy="50" r=".9"/><circle cx="9" cy="47" r=".6"/><circle cx="38" cy="54" r=".6"/>
+  </g>
+  <g transform="rotate(-20 32 32)" stroke-linecap="round">
+    <!-- spine -->
+    <rect x="7" y="30.4" width="51" height="3.2" rx="1.6" fill="url(#hull)"/>
+    <!-- forked antenna -->
+    <path d="M8 32 L2.5 27.5 M8 32 L1.5 32 M8 32 L2.5 36.5" stroke="#9fb4c6" stroke-width="1.4" fill="none"/>
+    <!-- hangar modules -->
+    <rect x="41" y="26.6" width="7" height="4" rx="1" fill="#6f8496"/>
+    <rect x="47" y="33.4" width="6.5" height="3.8" rx="1" fill="#6f8496"/>
+    <rect x="53" y="27.8" width="6" height="8.4" rx="1.4" fill="#8aa0b3"/>
+    <circle cx="56" cy="32" r="1.4" fill="#3fc1ff"/>
+    <!-- rear ring (behind) -->
+    <g stroke="#b5521b" fill="none">
+      <ellipse cx="17" cy="32" rx="6.5" ry="20" stroke-width="3.2"/>
+      <path d="M17 12.5 V51.5 M11.5 21 L22.5 43 M11.5 43 L22.5 21" stroke="#8a6a55" stroke-width="1"/>
+    </g>
+    <!-- front ring -->
+    <g fill="none">
+      <ellipse cx="28" cy="32" rx="7" ry="21" stroke="#f07a2e" stroke-width="3.4"/>
+      <path d="M28 11.5 V52.5 M22 21 L34 43 M22 43 L34 21" stroke="#b9c7d3" stroke-width="1"/>
+    </g>
+    <circle cx="17" cy="32" r="2.4" fill="#b9c7d3"/>
+    <circle cx="28" cy="32" r="2.8" fill="#e8f0f6"/>
+  </g>
 </svg>
