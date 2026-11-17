@@ -1,6 +1,6 @@
 # SC Companion
 
-A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
+A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`, `ships.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
 
 Live site: https://ziirqoh.github.io/sc-companion/
 
@@ -24,6 +24,12 @@ The header has a dark/light theme switch and a language menu (English, French, G
 | **Salvage Ships** | Every salvage ship from UEX with cargo, crew, pad size and fracture limit, what a full hold of RMC is worth now, and a step-by-step guide for each ship. It also covers salvaging on foot with the multi-tool, Cambio and MaxLift. |
 | **Cargo Crates** | For crates found in wrecks and derelicts: add what each crate holds and how many SCU. It ranks the best single place to sell everything, compares that with selling each item at its own best place, and shows the top buyers for each item. Illegal goods are flagged. It also explains where to find crates, how to take them and what is legal. |
 | **Salvage Guide** | How salvage works, salvaging a wreck step by step, salvage contracts and how to complete them, legality, scraper modules, refining and selling, and where to start. It's written for Alpha 4.10 from the Star Citizen wiki. |
+
+## Ships
+
+The **Ships** tab (`#/ships`, or `#/ships/<ship id>` to open one) lists every ship and ground vehicle: role, size, crew, cargo grids and largest box, speeds, agility, quantum drive and fuel, hull, armor and shields, signatures, every weapon, turret, missile rack and countermeasure, all components (size, grade, class), insurance, and where to buy or rent it in game. Click a column title to sort.
+
+Stats come from the [Star Citizen Wiki API](https://api.star-citizen.wiki) (read from the game files), plus UEX for landing pads and box sizes. `scripts/ships.mjs` builds `data/ships.json` about once a day; the other runs republish the previous file. The page only downloads it when the tab is opened.
 
 ## How the data works
 

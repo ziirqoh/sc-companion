@@ -1017,8 +1017,8 @@ function renderHome() {
 // ---------- navigation ----------
 // Pages live in the URL hash (#/ and #/trade/<tab>) so links, bookmarks and the back button work.
 
-// Panel ids per section: Trade uses tab-<name>, Salvage uses tab-sv-<name>.
-const SECTIONS = { trade: 'tab-', salvage: 'tab-sv-' };
+// Panel ids per section: Trade uses tab-<name>, Salvage uses tab-sv-<name>. Ships has no sub-tabs (#/ships/<ship id>, see ships.js).
+const SECTIONS = { trade: 'tab-', salvage: 'tab-sv-', ships: 'tab-ships-' };
 
 function route() {
   if (location.hash.length > 1 && !location.hash.startsWith('#/')) return; // in-page anchors, not pages
@@ -1030,7 +1030,7 @@ function route() {
   pageEl.querySelectorAll('.sub-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
   pageEl.querySelectorAll('.panel').forEach((el) => el.classList.toggle('active', el.id === SECTIONS[current] + tab));
   if (current === 'home' && data) renderHome(); // reflect settings changed on the other pages
-  window.scrollTo(0, 0);
+  if (!(current === 'ships' && tab !== 'sell')) window.scrollTo(0, 0);
 }
 
 window.addEventListener('hashchange', route);

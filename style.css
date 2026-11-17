@@ -384,3 +384,33 @@ kbd { background: var(--panel-2); border: 1px solid var(--line); border-bottom-w
 
 /* Header: theme switch and language menu */
 .status select { width: auto; padding: 5px 8px; }
+
+/* Ships tab */
+#page-ships { padding-top: 4px; }
+#sh-summary { margin: 0 0 8px; }
+#sh-table td { white-space: nowrap; }
+#sh-table td .sub { white-space: normal; max-width: 220px; }
+.ship-detail { white-space: normal; }
+.ship-head { display: flex; gap: 16px; align-items: flex-start; margin-bottom: 14px; }
+.ship-head img { width: 320px; max-width: 40%; border-radius: 8px; border: 1px solid var(--line); object-fit: cover; }
+.ship-head h3 { margin: 0 0 4px; font-size: 18px; }
+.ship-desc { margin: 8px 0; max-width: 720px; color: var(--text); }
+.spec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.spec-card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.spec-card.wide { grid-column: 1 / -1; }
+.spec-card h4 { margin: 0 0 8px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .4px; }
+.spec { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.spec:first-of-type { border-top: 0; }
+.spec > .label { color: var(--muted); flex: 0 0 auto; max-width: 48%; }
+.spec > span:last-child { text-align: right; }
+table.compact th, table.compact td { padding: 5px 8px; font-size: 12px; }
+/* The detail sits in a row of the wide ship table: keep it to the visible width while the table scrolls. */
+.ship-detail { position: sticky; left: 0; width: calc(100vw - 104px); max-width: 1400px; }
+.shop-row { display: flex; justify-content: space-between; gap: 10px; padding: 3px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.shop-row b { white-space: nowrap; }
+.spec-card .subhead { color: var(--muted); font-size: 12px; margin: 8px 0 2px; }
+@media (max-width: 700px) {
+  .ship-detail { width: calc(100vw - 72px); }
+  .ship-head { flex-direction: column; }
+  .ship-head img { width: 100%; max-width: 100%; }
+}
