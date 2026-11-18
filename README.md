@@ -28,7 +28,7 @@ The header has a dark/light theme switch and a language menu (English, French, G
 
 ## Ships
 
-The **Ships** tab (`#/ships`, or `#/ships/<ship id>` to open one) lists every ship and ground vehicle: role, size, crew, cargo grids and largest box, speeds, agility, quantum drive and fuel, hull, armor and shields, signatures, every weapon, turret, missile rack and countermeasure, all components (size, grade, class), insurance, and where to buy or rent it in game. Click a column title to sort.
+The **Ships** tab (`#/ships`, or `#/ships/<ship id>` to open one) lists every ship and ground vehicle: role, size, crew, cargo grids and largest box, speeds, agility, quantum drive and fuel, hull, armor and shields, signatures, every weapon, turret, missile rack and countermeasure, all components (size, grade, class), insurance, where to buy it (in-game shops with aUEC prices, and the RSI pledge store with its current price, warbond offers and packs), and where to rent it. Click a column title to sort.
 
 Stats come from the [Star Citizen Wiki API](https://api.star-citizen.wiki) (read from the game files), plus UEX for landing pads and box sizes. `scripts/ships.mjs` builds `data/ships.json` about once a day; the other runs republish the previous file. The page only downloads it when the tab is opened.
 

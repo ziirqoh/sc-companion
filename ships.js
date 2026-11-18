@@ -26,7 +26,8 @@ const SHIP_COLUMNS = [
   { key: 'dps', label: 'Pilot DPS', num: true, value: (s) => s.weap.dps },
   { key: 'qt', label: 'Quantum speed', num: true, value: (s) => s.qt?.speed ?? null },
   { key: 'pad', label: 'Pad', value: (s) => s.pad },
-  { key: 'price', label: 'In-game price', num: true, value: cheapestBuy },
+  // Sorts by the in-game price; the pledge price is shown underneath.
+  { key: 'price', label: 'Where to buy', num: true, value: cheapestBuy },
 ];
 
 const COMPONENT_LABELS = {
@@ -80,14 +81,18 @@ function cycleShipSort(key) {
 function filteredShips() {
   const q = $('sh-search').value.trim().toLowerCase();
   const kind = $('sh-kind').value, career = $('sh-career').value, size = $('sh-size').value, maker = $('sh-maker').value;
-  const buyable = $('sh-buyable').checked;
+  const buy = $('sh-buy').value;
+  const buyable = (s) => !buy
+    || (buy === 'game' && s.buy.length)
+    || (buy === 'pledge' && s.pledge?.onSale)
+    || (buy === 'none' && !s.buy.length && !s.pledge?.onSale);
   const col = SHIP_COLUMNS.find((c) => c.key === shipSort?.key);
   return shipsData.ships
     .filter((s) => !kind || s.kind === kind)
     .filter((s) => !career || s.career === career)
     .filter((s) => !size || s.size === size)
     .filter((s) => !maker || s.mk === maker)
-    .filter((s) => !buyable || s.buy.length)
+    .filter(buyable)
     .filter((s) => !q || `${s.n} ${s.full} ${s.mk} ${s.role} ${s.career}`.toLowerCase().includes(q))
     .sort((a, b) => {
       if (col) {
@@ -137,7 +142,7 @@ function renderShips() {
         <td class="num">${s.weap.dps ? fmt(s.weap.dps) : dash}</td>
         <td class="num">${s.qt ? `${fmt(s.qt.speed / 1000)} km/s` : dash}</td>
         <td>${esc(s.pad || '—')}</td>
-        <td class="num">${price ? `${fmt(price)} aUEC` : dash}</td>
+        <td class="num">${price ? `${fmt(price)} aUEC` : ''}${s.pledge?.onSale ? `<div class="sub">Pledge $${fmt(s.pledge.price)}</div>` : ''}${!price && !s.pledge?.onSale ? dash : ''}</td>
       </tr>
       ${open ? `<tr class="detail"><td colspan="${SHIP_COLUMNS.length}">${shipDetail(s)}</td></tr>` : ''}`;
     }).join('') : `<tr><td class="empty" colspan="${SHIP_COLUMNS.length}">No ship matches these filters.</td></tr>`}
@@ -158,7 +163,7 @@ function shipDetail(s) {
   const overview = specCard('Overview',
     spec('Manufacturer', esc(s.mk)) + spec('Role', esc(s.role)) + spec('Career', esc(s.career)) + spec('Size', esc(s.size)) +
     spec('Crew', crew) + spec('Landing pad', esc(s.pad)) + spec('Length × width × height', dims) +
-    spec('Mass', s.mass ? `${fmt(s.mass / 1000)} t` : null) + spec('Status', esc(s.status)) + spec('Pledge price', s.msrp ? `$${fmt(s.msrp)}` : null));
+    spec('Mass', s.mass ? `${fmt(s.mass / 1000)} t` : null) + spec('Status', esc(s.status)));
 
   const cargo = specCard('Cargo & storage',
     spec('Cargo capacity', s.cargo ? `${fmt1(s.cargo)} SCU` : '0 SCU') +
@@ -205,10 +210,37 @@ function shipDetail(s) {
     </div>` : '';
 
   const shopList = (rows) => rows.map((r) => `<div class="shop-row"><span>${esc(r.t)}${r.sys ? ` <span class="muted">· ${esc(r.sys)}</span>` : ''}</span><b>${fmt(r.p)} aUEC</b></div>`).join('');
-  const inGame = specCard('In game',
+  const inGame = specCard('Rent & insurance',
     (s.ins ? spec('Insurance claim', `${fmt1(s.ins[0])} min`) + spec('Expedite', `${fmt1(s.ins[1])} min · ${fmt(s.ins[2])} aUEC`) : '') +
-    `<div class="subhead">Buy at</div>${s.buy.length ? shopList(s.buy) : '<div class="shop-row"><span class="muted">Not sold in game (pledge or loot only)</span></div>'}` +
     (s.rent.length ? `<div class="subhead">Rent at</div>${shopList(s.rent)}` : ''));
+
+  // Where to buy: in-game shops for aUEC, and the pledge store for real money.
+  const p = s.pledge;
+  const link = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener">${text}</a>`;
+  const pledgeBody = p ? `
+      <div class="shop-row"><span>${p.onSale ? '<span class="good">On sale now</span>' : '<span class="muted">Not on sale right now</span>'}</span><b>${p.price ? `${p.onSale ? '' : 'Last price '}$${fmt(p.price)}` : ''}</b></div>
+      ${p.warbond ? `<div class="shop-row"><span>${link(p.warbond.url, 'Warbond offer ↗')}</span><b>$${fmt(p.warbond.p)}</b></div>` : ''}
+      ${p.packs.map((k) => `<div class="shop-row"><span>Also in: ${link(k.url, `${esc(k.t)} ↗`)}</span><b>$${fmt(k.p)}</b></div>`).join('')}
+      ${p.url ? `<div class="buy-link">${link(p.url, 'Open on the RSI pledge store ↗')}</div>` : ''}`
+    : '<div class="shop-row"><span class="muted">Not sold on the pledge store.</span></div>';
+  const neither = !s.buy.length && !p;
+  const howToGet = /wikelo/i.test(s.n) ? 'Earned in game by trading with Wikelo.'
+    : /exec|executive edition/i.test(s.n) ? 'Limited edition from events or rewards. It isn\'t on sale.'
+    : 'Not on sale for money or aUEC right now. It may come from missions, events or rewards.';
+  const whereToBuy = `
+    <div class="spec-card wide where-to-buy"><h4>Where to buy</h4>
+      ${neither ? `<p class="sub">${howToGet}</p>` : ''}
+      <div class="buy-cols">
+        <div>
+          <div class="subhead">In game, with aUEC</div>
+          ${s.buy.length ? shopList(s.buy) : '<div class="shop-row"><span class="muted">Not sold in any in-game shop.</span></div>'}
+        </div>
+        <div>
+          <div class="subhead">Pledge store, with real money</div>
+          ${pledgeBody}
+        </div>
+      </div>
+    </div>`;
 
   const links = [
     s.url && `<a href="${esc(s.url)}" target="_blank" rel="noopener">Official ship page ↗</a>`,
@@ -226,7 +258,7 @@ function shipDetail(s) {
           ${links ? `<div class="sub">${links}</div>` : ''}
         </div>
       </div>
-      <div class="spec-grid">${overview}${cargo}${flight}${quantum}${durability}${weapons}${inGame}${components}</div>
+      <div class="spec-grid">${whereToBuy}${overview}${cargo}${flight}${quantum}${durability}${weapons}${inGame}${components}</div>
     </div>`;
 }
 
@@ -256,6 +288,6 @@ $('sh-table').addEventListener('click', (e) => {
   renderShips();
 });
 ['sh-search'].forEach((id) => $(id).addEventListener('input', () => shipsData && renderShips()));
-['sh-kind', 'sh-career', 'sh-size', 'sh-maker', 'sh-buyable'].forEach((id) => $(id).addEventListener('change', () => shipsData && renderShips()));
+['sh-kind', 'sh-career', 'sh-size', 'sh-maker', 'sh-buy'].forEach((id) => $(id).addEventListener('change', () => shipsData && renderShips()));
 window.addEventListener('hashchange', showShipFromHash);
 showShipFromHash();
