@@ -963,6 +963,7 @@ function renderAll() {
   renderRoutes();
   renderCommodities();
   renderSalvage(); // salvage.js
+  renderMultiSell(); // multisell.js
   renderHome();
 }
 

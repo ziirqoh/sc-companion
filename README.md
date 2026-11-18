@@ -1,6 +1,6 @@
 # SC Companion
 
-A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`, `ships.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
+A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`, `ships.js`, `multisell.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
 
 Live site: https://ziirqoh.github.io/sc-companion/
 
@@ -13,6 +13,7 @@ The header has a dark/light theme switch and a language menu (English, French, G
 | Tab | What it does |
 |---|---|
 | **Sell Finder** | Choose your location. It lists every item the shop sells, with its price, current stock (▲▼ changes, 24 h chart) and the best place to sell it, plus your profit for your cargo and budget. Click an item to see every place that buys it. A section below shows what the shop buys from you. |
+| **Multi-Sell** | Add up to 6 commodities you carry, with SCU and where you bought each one. It ranks the places that buy all of them by total profit (revenue minus what you paid, capped by each shop's demand), compares that with selling each at its own best place, and shows a commodity-by-commodity breakdown. You can sell anywhere, in one system, or at one place you choose. |
 | **Best Routes** | Enter your investment and cargo space. It recommends what to buy, how many SCU, where to buy it and where to sell it, and can mix several goods on one route to fill your hold. Each route shows stock at the buy shop and demand at the sell shop. You can filter by start location, system, data age and illegal goods. |
 | **Commodity Guide** | Lists every commodity with its kind, risks (illegal, QT-volatile, perishable, explosive), cheapest buy, best sell and a wiki link. |
 

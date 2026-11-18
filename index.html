@@ -9,7 +9,7 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
   <link rel="manifest" href="site.webmanifest">
   <meta name="theme-color" content="#0b1016">
-  <link rel="stylesheet" href="style.css?v=24">
+  <link rel="stylesheet" href="style.css?v=25">
   <script>try { if (localStorage.getItem('sc-companion-theme') === 'light') document.documentElement.dataset.theme = 'light'; } catch (e) {}</script>
 </head>
 <body>
@@ -68,6 +68,11 @@
             <h3>Best Routes</h3>
             <p>Enter how much you want to invest and your cargo space. Get what to buy, where to buy it, and where to sell it.</p>
             <div id="home-routes" class="feature-live"></div>
+          </a>
+          <a class="feature" href="#/trade/multi">
+            <div class="feature-icon">⇶</div>
+            <h3>Multi-Sell</h3>
+            <p>Carrying 2, 3 or 4 different goods? Find the one place that buys them all for the biggest total profit.</p>
           </a>
           <a class="feature" href="#/trade/commodities">
             <div class="feature-icon">▤</div>
@@ -129,6 +134,7 @@
     <div id="page-trade" class="page">
     <nav class="sub-nav">
       <a class="tab" data-tab="sell" href="#/trade/sell">Sell Finder</a>
+      <a class="tab" data-tab="multi" href="#/trade/multi">Multi-Sell</a>
       <a class="tab" data-tab="routes" href="#/trade/routes">Best Routes</a>
       <a class="tab" data-tab="commodities" href="#/trade/commodities">Commodity Guide</a>
     </nav>
@@ -161,6 +167,38 @@
         <summary>What this shop buys from you</summary>
         <div class="table-wrap"><table id="s-buys"></table></div>
       </details>
+    </section>
+
+    <!-- Multi-Sell: several commodities, one place that buys them all for the biggest profit -->
+    <section id="tab-multi" class="panel">
+      <p class="hint">Carrying several commodities? Add each one, how many SCU, and where you bought it. You'll see the one place that buys them all for the biggest total profit. Choose a system or a specific place to sell at, or leave it on "Best place".</p>
+      <div id="m-rows" class="crate-rows"></div>
+      <div class="form">
+        <button id="m-add" type="button">+ Add a commodity</button>
+        <label>Sell in
+          <select id="m-system"><option value="">Any system</option></select>
+        </label>
+        <label>Sell at
+          <select id="m-at"><option value="">Best place</option></select>
+        </label>
+        <label>Prices reported within
+          <select id="m-age">
+            <option value="24">24 hours</option>
+            <option value="72">3 days</option>
+            <option value="168" selected>7 days</option>
+            <option value="">Any age</option>
+          </select>
+        </label>
+      </div>
+      <p id="m-illegal" class="warn-box" hidden>⚠ Some of these goods are <b>illegal</b>. Only some terminals buy them (marked <span class="bad">no questions asked</span>), and being scanned with them can get you fined or a CrimeStat.</p>
+      <div id="m-empty" class="card">Add the commodities you're carrying: choose each one, enter how many SCU, and pick where you bought it so the profit counts what you paid.</div>
+      <div id="m-results" hidden>
+        <div id="m-summary" class="summary"></div>
+        <h2 id="m-breakdown-title"></h2>
+        <div class="table-wrap"><table id="m-breakdown"></table></div>
+        <h2>Every place that buys your load <small class="muted">· places that buy everything come first, then by profit</small></h2>
+        <div class="table-wrap"><table id="m-table"></table></div>
+      </div>
     </section>
 
     <!-- Investment planner -->
@@ -489,10 +527,11 @@
     <p>This is an unofficial Star Citizen fansite, not affiliated with the Cloud Imperium group of companies. All content on this site not authored by its host or users are property of their respective owners.</p>
   </footer>
 
-  <script src="i18n.js?v=2"></script>
+  <script src="i18n.js?v=3"></script>
   <script src="shape.js?v=19"></script>
-  <script src="app.js?v=23"></script>
+  <script src="app.js?v=24"></script>
   <script src="salvage.js?v=22"></script>
   <script src="ships.js?v=1"></script>
+  <script src="multisell.js?v=1"></script>
 </body>
 </html>
