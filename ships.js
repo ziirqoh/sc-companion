@@ -218,7 +218,7 @@ function shipDetail(s) {
   const p = s.pledge;
   const link = (url, text) => `<a href="${esc(url)}" target="_blank" rel="noopener">${text}</a>`;
   const pledgeBody = p ? `
-      <div class="shop-row"><span>${p.onSale ? '<span class="good">On sale now</span>' : '<span class="muted">Not on sale right now</span>'}</span><b>${p.price ? `${p.onSale ? '' : 'Last price '}$${fmt(p.price)}` : ''}</b></div>
+      <div class="shop-row"><span>${p.onSale ? '<span class="good">On sale now</span>' : '<span class="muted">Not on sale right now</span>'}${p.edition ? ` <span class="muted">· ${esc(p.edition)}</span>` : ''}</span><b>${p.price ? `${p.onSale ? '' : 'Last price '}$${fmt(p.price)}` : ''}</b></div>
       ${p.warbond ? `<div class="shop-row"><span>${link(p.warbond.url, 'Warbond offer ↗')}</span><b>$${fmt(p.warbond.p)}</b></div>` : ''}
       ${p.packs.map((k) => `<div class="shop-row"><span>Also in: ${link(k.url, `${esc(k.t)} ↗`)}</span><b>$${fmt(k.p)}</b></div>`).join('')}
       ${p.url ? `<div class="buy-link">${link(p.url, 'Open on the RSI pledge store ↗')}</div>` : ''}`

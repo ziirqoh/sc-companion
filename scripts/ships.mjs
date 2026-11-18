@@ -3,7 +3,7 @@
 // so this runs about once a day; the other runs republish the previous file.
 
 const WIKI_API = 'https://api.star-citizen.wiki/api/v2';
-export const SHIPS_FORMAT = 2;
+export const SHIPS_FORMAT = 3;
 const MAX_AGE_MS = 23 * 60 * 60 * 1000;
 
 // Item catalogues, used for weapon sizes and for the class (Military, Civilian…) of components.
@@ -77,7 +77,10 @@ function shapeShip(v, items, uexByName) {
   // Pledge store (real money): the standalone ship, a warbond offer if one is on sale, and packs that include it.
   const skus = (v.skus || []).filter((k) => k.source === 'pledge_store' && k.price);
   const ships = skus.filter((k) => !k.is_package && /\/Standalone-Ships\//i.test(k.url || ''));
-  const standalone = ships.find((k) => k.available && !k.is_warbond) || ships.find((k) => !k.is_warbond) || null;
+  // Prefer the regular listing; special editions ("Polaris - 10 Year") are used when they're the one on sale.
+  const regular = (k) => norm(k.title) === norm(v.name);
+  const standalone = ships.find((k) => k.available && !k.is_warbond && regular(k)) || ships.find((k) => k.available && !k.is_warbond)
+    || ships.find((k) => !k.is_warbond && regular(k)) || ships.find((k) => !k.is_warbond) || null;
   const warbond = ships.filter((k) => k.available && k.is_warbond).sort((a, b) => a.price - b.price)[0] || null;
   const packs = skus.filter((k) => k.is_package && k.available).sort((a, b) => a.price - b.price).slice(0, 3)
     .map((k) => ({ t: k.title, p: k.discounted_price || k.price, url: k.url }));
@@ -85,6 +88,7 @@ function shapeShip(v, items, uexByName) {
     url: standalone?.url || v.pledge_url || null,
     price: standalone ? standalone.discounted_price || standalone.price : v.msrp || null,
     onSale: !!standalone?.available,
+    edition: standalone && !regular(standalone) ? standalone.title : null,
     warbond: warbond ? { p: warbond.discounted_price || warbond.price, url: warbond.url } : null,
     packs,
   } : null;
