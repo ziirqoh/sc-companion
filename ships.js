@@ -243,6 +243,7 @@ function shipDetail(s) {
     </div>`;
 
   const links = [
+    `<a href="#/ships/loadout/${encodeURIComponent(s.id)}">Customize its loadout →</a>`,
     s.url && `<a href="${esc(s.url)}" target="_blank" rel="noopener">Official ship page ↗</a>`,
     s.wiki && `<a href="${esc(s.wiki)}" target="_blank" rel="noopener">Star Citizen Wiki ↗</a>`,
   ].filter(Boolean).join(' · ');
@@ -267,7 +268,7 @@ function showShipFromHash() {
   const [, page, id] = location.hash.split('/');
   if (page !== 'ships') return;
   loadShips();
-  if (id && shipsData) {
+  if (id && id !== 'loadout' && shipsData) {
     const ship = shipsData.ships.find((s) => s.id === decodeURIComponent(id));
     if (ship && openShip !== ship.id) {
       openShip = ship.id;

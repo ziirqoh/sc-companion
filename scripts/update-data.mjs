@@ -4,13 +4,15 @@
 //   node scripts/update-data.mjs <out-dir>
 //
 // The previous history is read back from the published site (SITE_URL), so nothing has to be committed.
-// It also republishes the ship database (data/ships.json), refreshed about once a day (see ships.mjs).
+// It also republishes the ship database (data/ships.json) and the parts database for the Loadout Builder
+// (data/loadout.json), both refreshed about once a day (see ships.mjs and loadout.mjs).
 
 import { createRequire } from 'node:module';
 import { mkdir, writeFile, copyFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { updateShips } from './ships.mjs';
+import { updateLoadout } from './loadout.mjs';
 
 const require = createRequire(import.meta.url);
 const { UEX_API, shapeData, appendSnapshot } = require('../shape.js');
@@ -18,7 +20,7 @@ const { UEX_API, shapeData, appendSnapshot } = require('../shape.js');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.resolve(process.argv[2] || '_site');
 const SITE_URL = process.env.SITE_URL || 'https://ziirqoh.github.io/sc-companion';
-const SITE_FILES = ['index.html', 'style.css', 'i18n.js', 'app.js', 'salvage.js', 'ships.js', 'multisell.js', 'shape.js',
+const SITE_FILES = ['index.html', 'style.css', 'i18n.js', 'app.js', 'salvage.js', 'ships.js', 'loadout.js', 'multisell.js', 'shape.js',
   'logo.svg', 'favicon-32.png', 'apple-touch-icon.png', 'icon-512.png', 'site.webmanifest'];
 
 async function getJson(url) {
@@ -63,6 +65,7 @@ try {
 }
 
 const ships = await updateShips({ previous: await getPublished('ships.json'), uexVehicles, getJson, now });
+const loadout = await updateLoadout({ previous: await getPublished('loadout.json'), ships: ships?.ships, version: ships?.version, getJson, now });
 
 await mkdir(path.join(OUT, 'data'), { recursive: true });
 for (const file of SITE_FILES) await copyFile(path.join(ROOT, file), path.join(OUT, file));
@@ -70,5 +73,6 @@ await writeFile(path.join(OUT, 'data', 'latest.json'), JSON.stringify(latest));
 await writeFile(path.join(OUT, 'data', 'history.json'), JSON.stringify(history || { times: [], series: {} }));
 await writeFile(path.join(OUT, 'data', 'meta.json'), JSON.stringify({ fetchedAt: latest.fetchedAt, snapshots: history?.times.length || 0 }));
 if (ships) await writeFile(path.join(OUT, 'data', 'ships.json'), JSON.stringify(ships));
+if (loadout) await writeFile(path.join(OUT, 'data', 'loadout.json'), JSON.stringify(loadout));
 await writeFile(path.join(OUT, '.nojekyll'), '');
 console.log(`Wrote site to ${OUT}`);

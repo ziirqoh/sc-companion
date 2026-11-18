@@ -417,3 +417,23 @@ table.compact th, table.compact td { padding: 5px 8px; font-size: 12px; }
   .ship-head { flex-direction: column; }
   .ship-head img { width: 100%; max-width: 100%; }
 }
+
+/* Loadout Builder */
+.lo-head img { width: 260px; }
+.lo-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.lo-cards { display: flex; flex-wrap: wrap; gap: 10px; }
+.lo-cards .card { min-width: 150px; }
+.lo-table td { vertical-align: top; }
+.lo-table td.lo-stats { white-space: normal; min-width: 220px; font-size: 12px; line-height: 1.6; }
+tr.lo-changed td:first-child { border-left: 3px solid var(--accent); }
+.lo-detail { white-space: normal; display: flex; flex-direction: column; gap: 10px; }
+.lo-shops { background: var(--panel); border: 1px solid var(--accent); border-radius: 8px; padding: 8px 12px; max-width: 720px; }
+.lo-shops .subhead { color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+.lo-detail > .subhead { color: var(--muted); font-size: 12px; }
+.lo-parts td { vertical-align: top; }
+#page-ships h2 small { font-weight: 400; font-size: 13px; }
+@media (max-width: 600px) {
+  .lo-head { flex-direction: column; }
+  .lo-head img { width: 100%; max-width: 100%; }
+  .lo-cards .card { flex: 1 1 140px; min-width: 0; }
+}

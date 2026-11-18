@@ -1,6 +1,6 @@
 # SC Companion
 
-A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`, `ships.js`, `multisell.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
+A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`, `ships.js`, `loadout.js`, `multisell.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
 
 Live site: https://ziirqoh.github.io/sc-companion/
 
@@ -28,9 +28,17 @@ The header has a dark/light theme switch and a language menu (English, French, G
 
 ## Ships
 
-The **Ships** tab (`#/ships`, or `#/ships/<ship id>` to open one) lists every ship and ground vehicle: role, size, crew, cargo grids and largest box, speeds, agility, quantum drive and fuel, hull, armor and shields, signatures, every weapon, turret, missile rack and countermeasure, all components (size, grade, class), insurance, where to buy it (in-game shops with aUEC prices, and the RSI pledge store with its current price, warbond offers and packs), and where to rent it. Click a column title to sort.
+### Ship Database
+
+The **Ship Database** tab (`#/ships`, or `#/ships/<ship id>` to open one) lists every ship and ground vehicle: role, size, crew, cargo grids and largest box, speeds, agility, quantum drive and fuel, hull, armor and shields, signatures, every weapon, turret, missile rack and countermeasure, all components (size, grade, class), insurance, where to buy it (in-game shops with aUEC prices, and the RSI pledge store with its current price, warbond offers and packs), and where to rent it. Click a column title to sort.
 
 Stats come from the [Star Citizen Wiki API](https://api.star-citizen.wiki) (read from the game files), plus UEX for landing pads and box sizes. `scripts/ships.mjs` builds `data/ships.json` about once a day; the other runs republish the previous file. The page only downloads it when the tab is opened.
+
+### Loadout Builder
+
+The **Loadout Builder** tab (`#/ships/loadout/<ship id>`) lets you choose a ship and swap every part you can change in game: guns (pilot and turret), missiles on each rack, mining lasers, shield generators, power plants, coolers, quantum drive and radar. Each slot shows its size, the stock part and the part fitted now, its main stats with ▲▼ against stock, the cheapest price and the shop. Click a slot to compare every part that fits it (bespoke mounts only offer their own parts) with all its stats, and to see every shop that sells the fitted part, with the price and how old the report is. The ship's totals (pilot and turret DPS, missile damage, shield HP and regen, power, cooling, quantum speed and spool, mining laser power) and the upgrade cost update as you go, and a shopping list groups the parts by the cheapest shop. You can limit shops to one star system. The build is saved in the URL, so you can share it with Copy link.
+
+`scripts/loadout.mjs` builds `data/loadout.json` about once a day from the Star Citizen Wiki API: each ship's hardpoint tree (which slots can be changed and their sizes) and every part with its stats and the in-game shop prices that UEX players report. The page only downloads it when the tab is opened.
 
 ## How the data works
 

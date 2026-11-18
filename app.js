@@ -1018,20 +1018,23 @@ function renderHome() {
 // ---------- navigation ----------
 // Pages live in the URL hash (#/ and #/trade/<tab>) so links, bookmarks and the back button work.
 
-// Panel ids per section: Trade uses tab-<name>, Salvage uses tab-sv-<name>. Ships has no sub-tabs (#/ships/<ship id>, see ships.js).
+// Panel ids per section: Trade uses tab-<name>, Salvage uses tab-sv-<name>, Ships uses tab-ships-<name>.
+// Ships: #/ships and #/ships/<ship id> are the database (ships.js), #/ships/loadout/… the Loadout Builder (loadout.js).
 const SECTIONS = { trade: 'tab-', salvage: 'tab-sv-', ships: 'tab-ships-' };
 
 function route() {
   if (location.hash.length > 1 && !location.hash.startsWith('#/')) return; // in-page anchors, not pages
-  const [, page = '', tab = 'sell'] = location.hash.split('/');
+  const [, page = '', hashTab = 'sell'] = location.hash.split('/');
   const current = SECTIONS[page] ? page : 'home';
+  const tab = current === 'ships' ? (hashTab === 'loadout' ? 'loadout' : 'list') : hashTab;
   const pageEl = $('page-' + current);
   document.querySelectorAll('.page').forEach((el) => el.classList.toggle('active', el === pageEl));
   document.querySelectorAll('.main-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.page === current));
   pageEl.querySelectorAll('.sub-nav .tab').forEach((el) => el.classList.toggle('active', el.dataset.tab === tab));
   pageEl.querySelectorAll('.panel').forEach((el) => el.classList.toggle('active', el.id === SECTIONS[current] + tab));
   if (current === 'home' && data) renderHome(); // reflect settings changed on the other pages
-  if (!(current === 'ships' && tab !== 'sell')) window.scrollTo(0, 0);
+  // Opening a ship in the database scrolls to it instead (ships.js).
+  if (!(current === 'ships' && tab === 'list' && hashTab !== 'sell')) window.scrollTo(0, 0);
 }
 
 window.addEventListener('hashchange', route);
