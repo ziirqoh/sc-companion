@@ -10,7 +10,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/cs
 
 http.createServer(async (req, res) => {
   const url = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-  const file = path.join(root, url === '/' ? 'index.html' : url);
+  const file = path.join(root, url.endsWith('/') ? url + 'index.html' : url);
   if (!file.startsWith(root)) return res.writeHead(403).end();
   try {
     const body = await readFile(file);

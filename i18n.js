@@ -818,6 +818,8 @@ const STRINGS = [
   ["Limited edition from events or rewards. It isn't on sale.", 'Édition limitée issue d’événements ou de récompenses. Elle n’est pas en vente.', 'Limitierte Edition aus Events oder Belohnungen. Nicht im Verkauf.', 'Edición limitada de eventos o recompensas. No está a la venta.'],
   ['Not on sale for money or aUEC right now. It may come from missions, events or rewards.', 'Pas en vente contre de l’argent ou des aUEC actuellement. Elle peut venir de missions, d’événements ou de récompenses.', 'Derzeit weder für Geld noch für aUEC erhältlich. Vielleicht über Missionen, Events oder Belohnungen.', 'No está a la venta por dinero ni aUEC ahora. Puede venir de misiones, eventos o recompensas.'],
 
+  ['Skip to content', 'Aller au contenu', 'Zum Inhalt springen', 'Ir al contenido'],
+
   // ---------- Ships: Loadout Builder ----------
   ['Loadout Builder', 'Configurateur d’équipement', 'Loadout-Planer', 'Configurador de equipamiento'],
   ['To change its parts, open the', 'Pour changer ses pièces, ouvrez le', 'Um seine Teile zu tauschen, öffne den', 'Para cambiar sus piezas, abre el'],

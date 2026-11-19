@@ -160,7 +160,7 @@ function sparkline(terminal, commodity, key) {
   const pts = series.map((s, i) => `${(((s.t - t0) / Math.max(1, t1 - t0)) * (W - 4) + 2).toFixed(1)},${(H - 3 - (vals[i] / max) * (H - 6)).toFixed(1)}`).join(' ');
   const first = vals[0], last = vals[vals.length - 1];
   const title = `${fmt(first)} → ${fmt(last)} SCU over ${series.length} refreshes (${new Date(t0).toLocaleTimeString()} – ${new Date(t1).toLocaleTimeString()})`;
-  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><title>${esc(title)}</title><polyline points="${pts}" fill="none" stroke="#3fc1ff" stroke-width="1.5"/></svg>`;
+  return `<svg class="spark" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><title>${esc(title)}</title><polyline points="${pts}" fill="none" stroke="#ff8a3d" stroke-width="1.5"/></svg>`;
 }
 
 // ---------- data loading ----------
@@ -1128,7 +1128,7 @@ $('refresh-btn').addEventListener('click', async () => {
   $('refresh-btn').disabled = false;
 });
 
-// Dark (default) or light theme. The <head> applies the saved choice before the page paints.
+// Dark or light theme: your saved choice, else your system setting. The <head> applies it before the page paints.
 const THEME_KEY = 'sc-companion-theme';
 function showTheme() {
   $('theme-btn').textContent = document.documentElement.dataset.theme === 'light' ? '☾ Dark' : '☀ Light';

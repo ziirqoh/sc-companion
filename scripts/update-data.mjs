@@ -20,7 +20,7 @@ const { UEX_API, shapeData, appendSnapshot } = require('../shape.js');
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const OUT = path.resolve(process.argv[2] || '_site');
 const SITE_URL = process.env.SITE_URL || 'https://ziirqoh.github.io/sc-companion';
-const SITE_FILES = ['index.html', 'style.css', 'i18n.js', 'app.js', 'salvage.js', 'ships.js', 'loadout.js', 'multisell.js', 'shape.js',
+const SITE_FILES = ['index.html', 'style.css', 'i18n.js', 'app.js', 'salvage.js', 'ships.js', 'loadout.js', 'multisell.js', 'a11y.js', 'shape.js',
   'logo.svg', 'favicon-32.png', 'apple-touch-icon.png', 'icon-512.png', 'site.webmanifest'];
 
 async function getJson(url) {

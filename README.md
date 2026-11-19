@@ -1,12 +1,14 @@
 # SC Companion
 
-A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`, `ships.js`, `loadout.js`, `multisell.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
+A free Star Citizen helper website: static files (`index.html`, `style.css`, `i18n.js`, `shape.js`, `app.js`, `salvage.js`, `ships.js`, `loadout.js`, `multisell.js`, `a11y.js`) published on GitHub Pages, plus a scheduled job that keeps the data fresh.
 
 Live site: https://ziirqoh.github.io/sc-companion/
 
 The front page (`#/`) shows live stats and a highlight from each tool. The tools are grouped under **Trade Companion** (`#/trade/...`) and **Salvage Companion** (`#/salvage/...`).
 
-The header has a dark/light theme switch and a language menu (English, French, German, Spanish). The page is written in English; `i18n.js` holds the translations and swaps the text as it appears. Place, commodity and ship names stay in English, as in the game. To translate new text, add a row to `STRINGS` in `i18n.js`.
+The header has a dark/light theme switch (it follows your system setting until you choose) and a language menu (English, French, German, Spanish). The page is written in English; `i18n.js` holds the translations and swaps the text as it appears. Place, commodity and ship names stay in English, as in the game. To translate new text, add a row to `STRINGS` in `i18n.js`.
+
+**Accessibility:** text is at least 12 px, fields and buttons are at least 40 px tall with borders you can see, and colours meet WCAG contrast. Everything works with the keyboard: Tab reaches every link, button, table row and sortable column title, Enter or Space opens a row or sorts a column, and a visible ring shows where you are. `a11y.js` adds this to the tables the other scripts draw, and tells screen readers the sort order, whether a row is open and which tab is current. A "Skip to content" link appears on the first Tab, and animations stop when your system asks for reduced motion.
 
 ## Trade Companion
 
